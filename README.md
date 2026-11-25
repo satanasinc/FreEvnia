@@ -1,7 +1,8 @@
 # FreEvnia
 
-**Unofficial, open-source control for Philips Evnia monitors on Linux** - switch inputs and turn
-**PBP / PIP** on and off from your PC, without the (Windows-only) Evnia Precision Center.
+**Unofficial, open-source control for Philips Evnia monitors on Linux**: switch inputs, turn **PBP / PIP** on and
+off, drive the **Ambiglow** lights and change the monitor's settings (picture mode, audio input, gaming options,
+Power LED, CEC and the **OLED panel care** options) from your PC, without the Windows-only Evnia Precision Center.
 
 > Not affiliated with, endorsed by or supported by Philips or TPV. "Philips" and "Evnia" are trademarks
 > of their owners and are used here only to say which monitors this works with.
@@ -19,14 +20,17 @@ How it works and how it was reverse-engineered: [PROTOCOL.md](PROTOCOL.md).
 
 ## Status
 
-Tested on one monitor: **Philips Evnia 49M2C8900L, firmware 1.08**.
+Tested on one monitor: **Philips Evnia 49M2C8900L, firmware 1.08**. Everything below was verified on the real
+panel (with a camera where it is visible).
 
-| Works (verified on the panel) | Not verified / not done |
+| Works | Not verified / not done |
 |---|---|
-| Read model, firmware, VCP values | PBP 2, PBP 3 |
-| Full screen / **PBP** / **PIP** on and off | Swap pictures |
-| PIP in the 4 corners, 3 sizes | HDMI as the *main* source |
-| Second picture: USB-C, HDMI 1, HDMI 2 (PBP and PIP) | Other Evnia models (see below) |
+| Input, full screen / **PBP** / **PIP**, PIP corner and size, second picture (USB-C, HDMI 1, HDMI 2) | PBP 2, PBP 3, swap pictures, HDMI as the *main* source |
+| **Ambiglow**: every mode, colour, position, brightness and speed the OSD offers (the monitor draws them) | Follow audio was not confirmed with a camera |
+| Fixed Ambiglow colours of any RGB value, drawn by the PC | |
+| Power LED, resolution notice, CEC, picture mode (SmartImage), audio input | |
+| Adaptive Sync, Smart Crosshair, Stark Shadow Boost, Smart Sniper | |
+| OLED care: Pixel Orbiting, Screen Saver, Multi-Logo Protection, Boundary / Taskbar Dimmer, Thermal Protection | Pixel refresh (a maintenance action, never run during development) |
 
 The official app's own data flags other Evnia models as USB-DDC capable; they may work, but **I have not
 tested any of them**. Reports and pull requests are welcome.
@@ -39,12 +43,13 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[gui]"               # drop [gui] if you only want the command line
 ```
 
-Let your user talk to the device (no root needed afterwards):
+Let your user talk to the devices (no root needed afterwards):
 
 ```bash
 sudo cp udev/99-freevnia.rules /etc/udev/rules.d/
 sudo udevadm control --reload
-sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109   # hub (input, PBP/PIP, settings)
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0cf2   # Ambiglow LED controller
 # your user must be in the "plugdev" group
 ```
 
@@ -54,12 +59,22 @@ The monitor's **USB upstream cable must be connected to this computer**.
 
 ```bash
 freevnia info                                   # model, BOM, firmware, scaler (read-only)
-freevnia get 0x60                               # read a VCP code (read-only)
 freevnia mode pbp1                              # side by side: this PC on the left, USB-C on the right
 freevnia mode pip --position lower-left --size large
 freevnia mode off                               # back to full screen
-freevnia mode pbp1 --sub hdmi2                  # choose the second picture
-freevnia-gui                                    # the window shown above
+
+freevnia settings                               # every setting with its current value
+freevnia settings smart-image fps               # change one (see `freevnia settings --help`)
+freevnia settings audio-source displayport
+freevnia pixel-refresh --yes                    # OLED pixel-refresh cycle (the panel is unusable while it runs)
+
+freevnia ambiglow info                          # the monitor's own Ambiglow setting
+freevnia ambiglow set --osd-mode "Color wave" --osd-color Rainbow --osd-brightness Brightest
+freevnia ambiglow color "#ff8800" --zone sides  # a fixed colour of any RGB value, drawn by the PC
+freevnia ambiglow off                           # LEDs off
+freevnia ambiglow release                       # hand the LEDs back to the monitor
+
+freevnia-gui                                    # the window shown above (PBP/PIP, Ambiglow, Settings tabs)
 ```
 
 A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-toggle.sh` toggles PBP
@@ -70,43 +85,26 @@ A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-to
 * **The monitor sends its USB (KVM) to the left / main picture.** If you make *another* device the main
   source, this computer loses the hub and **cannot switch back** - you will need the remote. The GUI asks
   for confirmation before changing the main source.
-* The GUI always knows whether PBP/PIP is active (`0xE6`). Mode, corner and size read back only for what you set
+* The GUI always knows whether PBP/PIP is active. Mode, corner and size read back only for what you set
   from FreEvnia; what you choose with the **remote cannot be read** (the monitor does not report it).
+* The monitor sometimes answers a read with its *previous* reply; FreEvnia asks again until the answer is
+  consistent, so loading the Settings tab takes a few seconds.
+* **Do not write the Ambiglow code `E2A038`**: it is the factory reset of the Ambiglow settings.
 * This writes to your monitor's configuration. It uses the same commands as the official app, but it is
   alpha software: **use at your own risk**, no warranty (see [LICENSE](LICENSE)).
 
 ## Roadmap
 
-* **Ambiglow (rear light) control** - the lights are driven by a separate USB device (`0cf2:b20b`, ENE)
-  and need their own protocol work.
 * Verify and enable PBP 2 / 3, picture swap, HDMI sources.
+* Confirm follow audio with a camera.
 * Other Evnia models; a proper list of tested hardware.
 * Packaging (PyPI, AUR, Flatpak) and a KDE Plasma widget.
 
 ## Related projects
 
-* [tomasf/evnia](https://github.com/tomasf/evnia) - macOS (Swift) library for the 49M2C8900 Ambiglow LEDs over USB.
+* [tomasf/evnia](https://github.com/tomasf/evnia) - macOS (Swift) library for the 49M2C8900 Ambiglow LEDs over USB;
+  the LED colour buffer protocol used here comes from it.
 
 ## License
 
 MIT - see [LICENSE](LICENSE). [README en español](README.es.md).
-
-## Ambiglow
-
-`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <colour>`, `status`; the GUI has a colour panel. The monitor's own presets can be read (`ambiglow info`) but not selected over USB: after `release` the LEDs stay dark until you pick a preset in the OSD. See PROTOCOL.md.
-
-## Monitor settings and OLED panel care
-
-`freevnia settings` lists them; `freevnia settings <key> <value>` changes one (Power LED, resolution notice,
-CEC, Pixel Orbiting, Screen Saver, Multi-Logo Protection, Boundary/Taskbar Dimmer, Thermal Protection, Auto
-Warning). The GUI has a *Settings* tab. `freevnia pixel-refresh --yes` starts the OLED pixel-refresh cycle (a
-maintenance action; the panel is unusable while it runs). `freevnia ambiglow info` shows the monitor's own
-Ambiglow setting. See PROTOCOL.md.
-
-`freevnia ambiglow info` shows the monitor's Ambiglow setting; `freevnia ambiglow set --osd-mode "Follow video" --osd-brightness Brightest` changes it. Fixed colours are drawn by FreEvnia; `release` hands the LEDs back through the monitor itself.
-
-The monitor itself only draws *follow video* (and *off*). For *static, color shift, color wave, color breathing and
-starry night* FreEvnia draws the effect with the colour, position, brightness and speed stored in the monitor:
-the GUI does it when you change the mode, and `freevnia ambiglow play` does it from the shell. Static stays after
-the program exits; the animated ones need the program running (closing the window gives the LEDs back).
-*Follow audio* is left to the monitor and was not tested.

@@ -7,6 +7,7 @@ the program loses access until you switch back with the remote.
 """
 import sys
 import threading
+import time
 
 import usb.core
 from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
@@ -42,21 +43,8 @@ def read_state():
             return "err"
 
 
-RUNNER = None                    # the animated effect currently drawn by FreEvnia (a thread)
-
-
-def stop_runner():
-    """Stop the animated effect. Must be called WITHOUT holding LOCK (the thread needs it to finish its frame)."""
-    global RUNNER
-    r, RUNNER = RUNNER, None
-    if r is not None:
-        r.stop()
-        r.join(timeout=2)
-
-
 def ambi(action, rgb=None, brightness=100):
     """Run one Ambiglow action under the USB lock (the LEDs are a separate USB device)."""
-    stop_runner()
     with LOCK:
         dev = amb.find_device()
         if action == "color":
@@ -141,37 +129,32 @@ def do_pixel_refresh():
 
 
 def read_osd():
-    with LOCK:
-        dev = device()
-        if dev is None:
-            return "n/a"
-        return amb.ddc_settings(dev)
+    """The monitor's Ambiglow setting. The monitor sometimes answers with its previous reply: try again."""
+    last = None
+    for _ in range(4):
+        with LOCK:
+            dev = device()
+            if dev is None:
+                return "n/a"
+            try:
+                return amb.ddc_settings(dev)
+            except ValueError as e:
+                last = e
+        time.sleep(0.8)
+    raise last
 
 
 def write_osd(**kw):
-    """Change the monitor's own Ambiglow setting and make the LEDs show it.
-
-    Follow video / follow audio / off are drawn by the monitor: FreEvnia lets go of the LEDs (clears its colour
-    buffer and rewrites the mode). The other modes are drawn by FreEvnia (static once, the rest in a thread).
-    What to draw comes from what was asked (current values + the change), not from a read-back, because the
-    monitor sometimes answers a read with an older reply."""
-    global RUNNER
-    stop_runner()
+    """Change the monitor's own Ambiglow setting; the monitor draws every mode itself. What to show comes from
+    what was asked (current values + the change), not from a read-back, because the monitor sometimes answers a
+    read with an older reply."""
     with LOCK:
         ddc = device()
         if ddc is None:
             raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
         vals = amb.ddc_settings(ddc)
         vals.update({k: v for k, v in kw.items() if v is not None})
-        amb.ddc_apply(ddc, **kw)
-        led = amb.find_device()
-        if vals["mode"] not in amb.SOFTWARE_MODES:
-            amb.release(led, ddc)
-        elif vals["mode"] == amb.DDC_STATIC:
-            amb.draw(led, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
-    RUNNER = amb.make_runner(amb.find_device(), vals, lock=LOCK)
-    if RUNNER is not None:
-        RUNNER.start()
+        amb.apply_osd(ddc, amb.find_device(), **kw)
     return vals
 
 
@@ -375,17 +358,6 @@ class Window(QWidget):
         if self.mode == "pip":
             self.run_apply("pip", "PIP size changed")
 
-    def closeEvent(self, event):
-        # An animated effect would freeze on its last frame: give the LEDs back before leaving.
-        if RUNNER is not None:
-            stop_runner()
-            try:
-                with LOCK:
-                    amb.release(amb.find_device(), device())
-            except Exception:
-                pass
-        event.accept()
-
     def build_osd_group(self, layout):
         gb = QGroupBox("Monitor's own Ambiglow setting (what the OSD stores)")
         gl = QGridLayout(gb)
@@ -399,9 +371,7 @@ class Window(QWidget):
             cb.activated.connect(lambda _i, f=field, c=cb: self.change_osd(f, c.currentData()))
             gl.addWidget(cb, r, 1)
             self.osd_combo[field] = cb
-        note = QLabel("Off is done by the monitor itself. Follow video only works when chosen with the monitor's OSD "
-                      "buttons. FreEvnia draws follow audio (it listens to what the PC plays; speed = sensitivity) "
-                      "and the other effects while this window stays open.")
+        note = QLabel("The monitor draws every mode itself, exactly as when you choose it with its OSD buttons.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray; font-size: 11px;")
         gl.addWidget(note, len(amb.DDC_FIELDS), 0, 1, 2)
@@ -493,9 +463,6 @@ class Window(QWidget):
                         cb.setCurrentIndex(i)
                 if tag == "osd-written":
                     self.status.setText("✔ " + text)
-                    if value["mode"] == 1:
-                        self.status.setText("✔ " + text + " — the monitor draws Follow video only when you pick it "
-                                            "with its own OSD buttons")
             self.osd_label.setText(text)
 
     def ambi_run(self, action, rgb=None):

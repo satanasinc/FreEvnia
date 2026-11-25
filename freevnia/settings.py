@@ -6,6 +6,7 @@ the Philips extended ones are three bytes (0xE2A0xx) and are read/written like a
 with the 3-byte code in place of the 1-byte one. All of these were read back after writing on a
 49M2C8900L (firmware 1.08).
 """
+import time
 from dataclasses import dataclass, field
 
 from . import usbddc as u
@@ -83,13 +84,19 @@ def read(dev, s: Setting) -> int:
 
 
 def read_all(dev) -> dict:
-    """{key: raw value, or None if the monitor does not answer for it}"""
-    out = {}
-    for s in SETTINGS:
-        try:
-            out[s.key] = read(dev, s)
-        except (ValueError, OSError):
-            out[s.key] = None
+    """{key: raw value, or None if the monitor does not answer for it}. Reads that fail (the monitor sometimes
+    answers with its previous reply) are tried again a couple of times."""
+    out = {s.key: None for s in SETTINGS}
+    for attempt in range(3):
+        for s in SETTINGS:
+            if out[s.key] is None:
+                try:
+                    out[s.key] = read(dev, s)
+                except (ValueError, OSError):
+                    pass
+        if all(v is not None for v in out.values()):
+            break
+        time.sleep(0.5)
     return out
 
 

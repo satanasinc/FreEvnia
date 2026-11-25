@@ -67,24 +67,6 @@ def run_ambiglow(a):
             print("Monitor Ambiglow setting: " + amb.ddc_describe(vals))
             if amb.is_captured(dev):
                 print("(FreEvnia has the LEDs right now; `freevnia ambiglow release` gives them back)")
-        elif a.action == "play":
-            vals = amb.ddc_settings(u.find_device())
-            if vals["mode"] not in amb.SOFTWARE_MODES:
-                sys.exit(f"the monitor draws '{amb.DDC_MODES.get(vals['mode'])}' by itself; `play` is for "
-                         + ", ".join(amb.DDC_MODES[m] for m in amb.SOFTWARE_MODES))
-            print("playing: " + amb.ddc_describe(vals) + "  (Ctrl-C to stop)")
-            if vals["mode"] == 7:
-                amb.draw(dev, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
-            else:
-                r = amb.make_runner(dev, vals)
-                r.start()
-                try:
-                    while r.is_alive():
-                        time.sleep(0.5)
-                except KeyboardInterrupt:
-                    pass
-                r.stop(); r.join()
-                amb.release(dev, _ddc_or_none())
         elif a.action == "set":
             def pick(table, text):
                 if text is None:
@@ -96,7 +78,7 @@ def run_ambiglow(a):
             kw = {f: pick(amb.DDC_FIELDS[f][1], getattr(a, "osd_" + f)) for f in amb.DDC_FIELDS}
             if all(v is None for v in kw.values()):
                 sys.exit("nothing to set: use --osd-mode / --osd-color / --osd-position / --osd-brightness / --osd-speed")
-            amb.ddc_apply(u.find_device(), **kw)
+            amb.apply_osd(u.find_device(), dev, **kw)
             print("Monitor Ambiglow setting: " + amb.ddc_describe(amb.ddc_settings(u.find_device())))
         elif a.action == "color":
             if not a.value:
@@ -105,15 +87,6 @@ def run_ambiglow(a):
         elif a.action == "off":
             amb.off(dev)
         elif a.action == "release":
-            amb.release(dev, _ddc_or_none())
-        elif a.action in ("rainbow", "breathe"):
-            try:
-                if a.action == "rainbow":
-                    amb.rainbow(dev, a.speed, a.brightness)
-                else:
-                    amb.breathe(dev, amb.parse_color(a.value or "white"), a.speed, a.brightness)
-            except KeyboardInterrupt:
-                pass
             amb.release(dev, _ddc_or_none())
     except amb.AmbiglowNotFound as e:
         sys.exit(str(e))
@@ -144,12 +117,11 @@ def main(argv=None):
     se.add_argument("value", nargs="?")
     pr = sub.add_parser("pixel-refresh", help="start the OLED pixel-refresh cycle (maintenance action)")
     pr.add_argument("--yes", action="store_true", help="confirm")
-    am = sub.add_parser("ambiglow", help="Ambiglow LEDs: info | set | play | color | off | release | rainbow | breathe | status")
-    am.add_argument("action", choices=["color", "off", "release", "rainbow", "breathe", "status", "info", "set", "play"])
-    am.add_argument("value", nargs="?", help="colour name or #RRGGBB (for color / breathe)")
+    am = sub.add_parser("ambiglow", help="Ambiglow LEDs: info | set (the monitor's own mode) | color | off | release | status")
+    am.add_argument("action", choices=["color", "off", "release", "status", "info", "set"])
+    am.add_argument("value", nargs="?", help="colour name or #RRGGBB (for color)")
     am.add_argument("--zone", choices=list(amb.ZONES), default="all")
     am.add_argument("--brightness", type=int, default=100, help="0-100 %%")
-    am.add_argument("--speed", type=float, default=1.0, help="effect speed (default 1)")
     am.add_argument("--osd-mode", help="(set) the monitor's own mode: " + ", ".join(amb.DDC_MODES.values()))
     am.add_argument("--osd-color", help="(set) " + ", ".join(amb.DDC_COLORS.values()))
     am.add_argument("--osd-position", help="(set) " + ", ".join(amb.DDC_POSITIONS.values()))

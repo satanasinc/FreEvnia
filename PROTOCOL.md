@@ -123,27 +123,47 @@ Writing `0xA5` alone does nothing. The official software sends, in this order, w
 
 This is independent interoperability work, **not affiliated with Philips or TPV**.
 
-## Ambiglow LEDs (ENE, USB `0cf2:b20b`) — verified on the 49M2C8900L under Linux
+## Ambiglow LEDs
 
-Protocol found by [tomasf/evnia](https://github.com/tomasf/evnia) (macOS, PID `0xB201`); the same
-transfers work on PID `0xB20B`. Vendor control transfers on endpoint 0: read `C0 / 81 / 0 / <addr>`,
-write `40 / 80 / 0 / <addr>`.
+Two separate things.
 
-- `0xE020` and `0xE030`: write `01 00 02 04 00 05 00 00 00 02 FF 00 00 00 00 01` to take software control.
-- `0xE100..0xE183`: 44 LEDs x `R G B`. Red, green and blue were seen correctly on the panel.
-- Release: write back the 64-byte region `0xE020..0xE05F` that was there before taking control.
-- The controller keeps showing whatever is in the colour buffer, so FreEvnia also saves and restores
-  `0xE100..0xE183`.
-- The OSD setting **is** visible in the control region (byte 1 of each 16-byte block = effect, byte 9 =
-  brightness; values from the official `MNTLightEffect_E` / `Bright_E` enums: 0 off, 1 static, 2 static
-  rainbow, 3 color shift, 5 wave, 7 breathing, 9 follow audio, 11 follow video, 12 starry night, ...;
-  brightness 0 brightest, 2 brighter, 4 bright). It is read-only: writing those bytes, with or without the
-  official library's extra `0x23 = 4` write, did not change the monitor (checked with a camera).
-- After releasing, the LEDs keep the restored buffer (dark) until a preset is picked in the OSD.
-- Static colour is read from the LED buffer `0xE100` even with byte 0 = 0 and the OSD mode "static"; the
-  moving effects need the monitor's own state and cannot be started from USB.
-- Needs the udev rule for `0cf2:b20b` (see `udev/99-freevnia.rules`).
+### 1. The monitor's own setting, over DDC (every mode works from here)
 
+Extended VCP codes, read and written like the settings below: `E2A019` mode (0 off, 1 follow video, 2 follow audio,
+3 color shift, 4 color wave, 5 color breathing, 6 starry night, 7 static), `E2A01A` colour (0 rainbow, 1 white,
+2 red, 3 rose, 4 magenta, 5 violet, 6 blue, 7 azure, 8 cyan, 9 aqua, 10 green, 11 pear, 12 yellow, 13 orange),
+`E2A01B` position (0 all zones, 2 central, 4 3-sided), `E2A01C` brightness (0 bright, 1 brighter, 2 brightest),
+`E2A01D` speed (0 low, 1 normal, 2 high). **The monitor draws every mode itself** (verified with a camera: colour
+shift and wave animate on the wall with nothing written by the host). Follow audio reacts to the audio the
+monitor receives; it was not confirmed with a camera.
+
+* **Do not write `E2A038` ("Ambiglow Set")**: in the official app it belongs to `EffectReset()` and restores the
+  factory Ambiglow settings (it did on the test unit; the previous values had to be written back).
+* The monitor mirrors the setting into the LED controller's control region (below): byte 1 of each 16-byte block at
+  `E020` is the effect (the official `MNTLightEffect_E`: 1 static, 2 static rainbow, 3 color shift, 4 color shift
+  rainbow, 5 wave, 7 breathing, 9 follow audio, 11 follow video, 12 starry night, ...). Writing those bytes yourself
+  does not change anything: use DDC.
+
+### 2. Fixed colours of any RGB value, drawn by the host (ENE controller `0cf2:b20b`)
+
+Transport (from [tomasf/evnia](https://github.com/tomasf/evnia), macOS, PID `0xB201`; the same transfers work on
+PID `0xB20B` under Linux): vendor control transfers on endpoint 0, read `C0 / 81 / 0 / <addr>`, write
+`40 / 80 / 0 / <addr>`.
+
+- `0xE020` and `0xE030`: write `01 00 02 04 00 05 00 00 00 02 ff 00 00 00 00 01` to take the LEDs for the host.
+- `0xE100..0xE183`: 44 LEDs x 3 bytes, **in the order R, B, G** on the unit tested (green and blue swapped
+  compared with the macOS notes). The controller shows whatever is in this buffer while it is in host state.
+- Giving the LEDs back: clear the buffer, **clear the capture leftovers** (below) and write the monitor's mode
+  back to itself over DDC so it reconfigures the controller.
+
+### Capture leftovers (important)
+
+The monitor, when the mode is changed (remote or DDC), only rewrites a few bytes of those blocks (mode, speed,
+brightness) and **leaves byte 0 (= 1, "the host draws"), byte 3 (= 4), byte 10 (= 0xff) and byte 15 (= 1) as they
+were**. With those leftovers the controller stays in "the host draws" state and the modes chosen with the remote
+control **or over DDC show nothing** (this was what made every effect look "dark" at first, and then broke the
+remote's own follow-video mode on the test unit). `freevnia.ambiglow.scrub()` clears bytes 0, 3, 10 and 15 of every
+block; the clean native state is `00 <mode> 00 00 00 05 00 00 00 <brightness> 00 00 00 00 00 00`.
 
 ## Settings: Power LED, resolution notice, CEC, OLED panel care (verified read and write)
 
@@ -177,24 +197,6 @@ and accept the value only when two consecutive answers agree (what `freevnia.usb
 Names of the dimmer / multi-logo levels are not known; only the numbers are. The OLED working-time and counter
 codes (`E2A04D`-`4F`, `E2A054`, `E2A055`) answer with the default (`cur=0, max=255`) and are not exposed.
 
-### Ambiglow settings over DDC (what the OSD stores)
-
-`E2A019` mode (0 off, 1 follow video, 2 follow audio, 3 color shift, 4 color wave, 5 color breathing, 6 starry
-night, 7 static), `E2A01A` colour (0 rainbow, 1 white, 2 red, 3 rose, 4 magenta, 5 violet, 6 blue, 7 azure,
-8 cyan, 9 aqua, 10 green, 11 pear, 12 yellow, 13 orange), `E2A01B` position (0 all zones, 2 central, 4 3-sided),
-`E2A01C` brightness (0 bright, 1 brighter, 2 brightest), `E2A01D` speed (0 low, 1 normal, 2 high). They are read
-and written like the settings above and the monitor then rewrites the LED controller registers itself
-(`E020` = `01 <effect> 00 04 00 05 ... ff`, effect numbering of the official `MNTLightEffect_E`).
-
-* **Do not write `E2A038` ("Ambiglow Set")**: in the official app it is part of `EffectReset()` and restores the
-  factory Ambiglow settings (it did on the test unit; the previous values had to be written back).
-* Only *follow video* is rendered by the monitor on its own. With the other modes the controller is in "host
-  draws" state: it shows whatever is in the colour buffer `0xE100` (zeros unless the PC writes them), so
-  *static* works if the PC fills the buffer, and *color shift / wave / breathing / starry night* showed no
-  animation (buffer stayed empty).
-* Giving the LEDs back after software control: clear the buffer and write the current `E2A019` value back to itself;
-  the monitor reconfigures the controller (verified with a camera). Restoring old register contents can be stale.
-
 ### Picture mode, audio input and gaming settings (verified read; writes verified with a visible change on the crosshair)
 
 | Setting | Code | Values (from the capability string) |
@@ -210,13 +212,3 @@ and written like the settings above and the monitor then rewrites the LED contro
 The monitor often answers a read with the *previous* reply (for extended codes the reply only echoes `e2`), so
 `get_vcp` can be given `expect_max`, the largest value in the capability string, and asks again when the
 answer's maximum does not match.
-
-### Capture leftovers (important when giving the LEDs back)
-
-FreEvnia's software control writes the capture block `01 00 02 04 00 05 00 00 00 02 ff 00 00 00 00 01` to `E020`/`E030`.
-The monitor, when the mode is changed (OSD or DDC), only rewrites a few bytes of those blocks (mode, speed,
-brightness) and **leaves byte 0 (= 1, "the PC draws"), byte 3 (= 4), byte 10 (= 0xff) and byte 15 (= 1) as they
-were**. With those leftovers the controller stays in "the PC draws" state and the modes chosen with the remote
-control stop showing anything (seen on the test unit). `freevnia.ambiglow.release()` therefore clears bytes
-0, 3, 10 and 15 of every block after handing the mode back; the clean native state is
-`00 <mode> 00 00 00 05 00 00 00 <brightness> 00 00 00 00 00 00`.
