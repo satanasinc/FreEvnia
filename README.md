@@ -1,0 +1,92 @@
+# FreEvnia
+
+**Unofficial, open-source control for Philips Evnia monitors on Linux** - switch inputs and turn
+**PBP / PIP** on and off from your PC, without the (Windows-only) Evnia Precision Center.
+
+> Not affiliated with, endorsed by or supported by Philips or TPV. "Philips" and "Evnia" are trademarks
+> of their owners and are used here only to say which monitors this works with.
+
+![FreEvnia window](docs/gui.png)
+
+## Why
+
+The Philips Evnia 49M2C8900L accepts input / PBP / PIP changes **only over USB**, not over the usual
+DDC channel (`ddcutil` reads work, but writes to the input source are silently ignored). The official
+app is Windows-only. FreEvnia talks to the monitor's USB hub directly, so it works on Linux and, since it
+is just USB control transfers, on anything that can run `libusb`.
+
+How it works and how it was reverse-engineered: [PROTOCOL.md](PROTOCOL.md).
+
+## Status
+
+Tested on one monitor: **Philips Evnia 49M2C8900L, firmware 1.08**.
+
+| Works (verified on the panel) | Not verified / not done |
+|---|---|
+| Read model, firmware, VCP values | PBP 2, PBP 3 |
+| Full screen / **PBP** / **PIP** on and off | Swap pictures |
+| PIP in the 4 corners, 3 sizes | HDMI 1 as second picture, HDMI as main |
+| Second picture: USB-C, HDMI 2 | Other Evnia models (see below) |
+
+The official app's own data flags other Evnia models as USB-DDC capable; they may work, but **I have not
+tested any of them**. Reports and pull requests are welcome.
+
+## Install
+
+```bash
+sudo apt install libusb-1.0-0        # or your distro's equivalent
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[gui]"               # drop [gui] if you only want the command line
+```
+
+Let your user talk to the device (no root needed afterwards):
+
+```bash
+sudo cp udev/99-freevnia.rules /etc/udev/rules.d/
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109
+# your user must be in the "plugdev" group
+```
+
+The monitor's **USB upstream cable must be connected to this computer**.
+
+## Use
+
+```bash
+freevnia info                                   # model, BOM, firmware, scaler (read-only)
+freevnia get 0x60                               # read a VCP code (read-only)
+freevnia mode pbp1                              # side by side: this PC on the left, USB-C on the right
+freevnia mode pip --position lower-left --size large
+freevnia mode off                               # back to full screen
+freevnia mode pbp1 --sub hdmi2                  # choose the second picture
+freevnia-gui                                    # the window shown above
+```
+
+A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-toggle.sh` toggles PBP
+(handy for a global keyboard shortcut).
+
+## Read this before you use it
+
+* **The monitor sends its USB (KVM) to the left / main picture.** If you make *another* device the main
+  source, this computer loses the hub and **cannot switch back** - you will need the remote. The GUI asks
+  for confirmation before changing the main source.
+* The GUI always knows whether PBP/PIP is active (`0xE6`). Mode, corner and size read back after you set them
+  from FreEvnia; whether the remote's choices are reflected is not confirmed yet.
+* This writes to your monitor's configuration. It uses the same commands as the official app, but it is
+  alpha software: **use at your own risk**, no warranty (see [LICENSE](LICENSE)).
+
+## Roadmap
+
+* **Ambiglow (rear light) control** - the lights are driven by a separate USB device (`0cf2:b20b`, ENE)
+  and need their own protocol work.
+* Verify and enable PBP 2 / 3, picture swap, HDMI sources.
+* Other Evnia models; a proper list of tested hardware.
+* Packaging (PyPI, AUR, Flatpak) and a KDE Plasma widget.
+
+## Related projects
+
+* [tomasf/evnia](https://github.com/tomasf/evnia) - macOS (Swift) library for the 49M2C8900 Ambiglow LEDs over USB.
+
+## License
+
+MIT - see [LICENSE](LICENSE). [README en español](README.es.md).

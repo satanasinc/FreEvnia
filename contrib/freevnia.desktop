@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FreEvnia
+Comment=PBP / PIP control for Philips Evnia monitors
+Exec=freevnia-gui
+Icon=video-display
+Terminal=false
+Categories=Utility;

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freevnia"
+version = "0.1.0"
+description = "Unofficial open-source control for Philips Evnia monitors on Linux: input, PBP and PIP over DDC/CI-over-USB"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["pyusb"]
+keywords = ["philips", "evnia", "monitor", "ddc", "pbp", "pip", "kvm", "linux"]
+
+[project.optional-dependencies]
+gui = ["PySide6-Essentials"]
+
+[project.scripts]
+freevnia = "freevnia.cli:main"
+freevnia-gui = "freevnia.gui:main"
+
+[tool.setuptools]
+packages = ["freevnia"]
