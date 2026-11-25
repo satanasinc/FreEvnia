@@ -233,10 +233,15 @@ DDC_FIELDS = {"mode": (DDC_MODE, DDC_MODES), "color": (DDC_COLOR, DDC_COLORS), "
               "brightness": (DDC_BRIGHTNESS, DDC_BRIGHTNESS_LEVELS), "speed": (DDC_SPEED, DDC_SPEEDS)}
 
 
+# Largest value in the capability string of each field; an answer with another maximum is a stale answer for
+# another code and is asked again.
+DDC_MAX = {"mode": 7, "color": 13, "position": 4, "brightness": 2, "speed": 2}
+
+
 def ddc_settings(ddc) -> dict:
     """{'mode': 1, 'color': 0, ...} as stored in the monitor."""
     from . import usbddc as u
-    return {k: u.get_vcp(ddc, code)["cur"] for k, (code, _) in DDC_FIELDS.items()}
+    return {k: u.get_vcp(ddc, code, expect_max=DDC_MAX[k])["cur"] for k, (code, _) in DDC_FIELDS.items()}
 
 
 def ddc_describe(values: dict) -> str:

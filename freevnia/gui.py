@@ -152,15 +152,18 @@ def write_osd(**kw):
     """Change the monitor's own Ambiglow setting and make the LEDs show it.
 
     Follow video / follow audio / off are drawn by the monitor: FreEvnia lets go of the LEDs (clears its colour
-    buffer and rewrites the mode). The other modes are drawn by FreEvnia (static once, the rest in a thread)."""
+    buffer and rewrites the mode). The other modes are drawn by FreEvnia (static once, the rest in a thread).
+    What to draw comes from what was asked (current values + the change), not from a read-back, because the
+    monitor sometimes answers a read with an older reply."""
     global RUNNER
     stop_runner()
     with LOCK:
         ddc = device()
         if ddc is None:
             raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        amb.ddc_apply(ddc, **kw)
         vals = amb.ddc_settings(ddc)
+        vals.update({k: v for k, v in kw.items() if v is not None})
+        amb.ddc_apply(ddc, **kw)
         led = amb.find_device()
         if vals["mode"] not in amb.SOFTWARE_MODES:
             amb.release(led, ddc)
