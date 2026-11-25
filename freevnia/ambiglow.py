@@ -75,8 +75,12 @@ def write(dev, addr, data):
 
 
 def is_captured(dev) -> bool:
-    """True if software currently owns the LEDs (the capture block is in place)."""
-    return read(dev, ADDR_CTRL_A, 1)[0] == 1
+    """True if software currently owns the LEDs (the capture block is in place).
+
+    The monitor itself also sets byte 0 to 1 in its own "follow video" mode (byte 1 = 0x0b), so byte 0 alone
+    is not enough: our capture block has byte 1 = 0 (effect "Off")."""
+    b = read(dev, ADDR_CTRL_A, 2)
+    return b[0] == 1 and b[1] == 0
 
 
 def capture(dev):
@@ -172,3 +176,29 @@ def breathe(dev, rgb, speed=1.0, brightness=100, stop=lambda: False):
         push(dev, [scale(rgb, brightness * (0.08 + 0.92 * level))] * LED_COUNT)
         t += 0.08 * speed
         time.sleep(0.03)
+
+
+# --- what the monitor OSD is currently set to (read-only) -----------------------------------
+# From the official library (MNTLightEffect_E, Bright_E): byte 1 of each 16-byte block at 0xE020 is the
+# effect, byte 9 the brightness. Writing these bytes does NOT change the monitor (verified with a camera).
+OSD_MODES = {
+    0: "Off", 1: "Static", 2: "Static rainbow", 3: "Color shift", 4: "Color shift rainbow",
+    5: "Color wave", 6: "Color wave rainbow", 7: "Color breathing", 8: "Color breathing rainbow",
+    9: "Follow audio", 10: "Follow audio rainbow", 11: "Follow video", 12: "Starry night",
+    13: "Starry night rainbow", 14: "User defined",
+}
+OSD_BRIGHTNESS = {0: "Brightest", 2: "Brighter", 4: "Bright"}
+
+
+def osd_state(dev):
+    """Read the monitor's own Ambiglow setting: a list of (mode name, brightness name) per active block."""
+    if is_captured(dev):
+        return None          # FreEvnia has the LEDs; the OSD setting is not on display
+    region = read(dev, ADDR_CTRL_A, REGION_LEN)
+    out = []
+    for i in range(0, REGION_LEN, 16):
+        blk = region[i:i + 16]
+        if blk[1] == 0:
+            continue          # an "Off" block has no brightness worth showing
+        out.append((OSD_MODES.get(blk[1], f"mode {blk[1]}"), OSD_BRIGHTNESS.get(blk[9], f"level {blk[9]}")))
+    return out

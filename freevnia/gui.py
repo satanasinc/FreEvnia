@@ -12,9 +12,11 @@ import usb.core
 from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QColorDialog, QGridLayout, QGroupBox, QHBoxLayout,
-                               QLabel, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget)
+                               QLabel, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget,
+                               QComboBox, QTabWidget)
 
 from . import ambiglow as amb
+from . import settings as st
 from . import usbddc as p
 
 LOCK = threading.Lock()          # one USB access at a time (polling and commands)
@@ -61,6 +63,7 @@ def apply(mode, loc, size, main="dp1", sub="usbc"):
 
 
 class Signals(QObject):
+    result = Signal(str, object)
     state = Signal(object)
     done = Signal(str)
     failed = Signal(str)
@@ -82,12 +85,63 @@ class Job(QRunnable):
             self.sig.failed.emit(str(e))
 
 
+class JobR(QRunnable):
+    """Run fn off the UI thread and emit result(tag, value) (or failed)."""
+    def __init__(self, fn, signals, tag):
+        super().__init__()
+        self.fn, self.sig, self.tag = fn, signals, tag
+
+    def run(self):
+        try:
+            self.sig.result.emit(self.tag, self.fn())
+        except Exception as e:
+            self.sig.failed.emit(str(e))
+
+
+def read_settings():
+    with LOCK:
+        dev = device()
+        if dev is None:
+            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
+        return st.read_all(dev), st.time_since_pixel_refresh(dev)
+
+
+def write_setting(key, value):
+    with LOCK:
+        dev = device()
+        if dev is None:
+            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
+        s = st.BY_KEY[key]
+        st.write(dev, s, value)
+        import time
+        time.sleep(0.4)
+        return key, st.read(dev, s)
+
+
+def do_pixel_refresh():
+    with LOCK:
+        dev = device()
+        if dev is None:
+            raise RuntimeError("No access to the monitor")
+        st.pixel_refresh(dev)
+    return None
+
+
+def read_osd():
+    with LOCK:
+        try:
+            return amb.osd_state(amb.find_device())
+        except amb.AmbiglowNotFound:
+            return "n/a"
+
+
 class Window(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FreEvnia - PBP / PIP")
         self.sig = Signals()
         self.sig.state.connect(self.on_state)
+        self.sig.result.connect(self.on_result)
         self.sig.done.connect(self.on_done)
         self.sig.failed.connect(self.on_failed)
         self.pool = QThreadPool.globalInstance()
@@ -100,6 +154,14 @@ class Window(QWidget):
         self.status = QLabel("Checking the monitor…")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs)
+        page1, page2, page3 = QWidget(), QWidget(), QWidget()
+        l1, l2, l3 = QVBoxLayout(page1), QVBoxLayout(page2), QVBoxLayout(page3)
+        self.tabs.addTab(page1, "PBP / PIP")
+        self.tabs.addTab(page2, "Ambiglow")
+        self.tabs.addTab(page3, "Settings")
+        self.tabs.currentChanged.connect(self.on_tab)
 
         box = QGroupBox("Mode")
         row = QHBoxLayout(box)
@@ -114,7 +176,7 @@ class Window(QWidget):
             self.mode_btn[key] = b
             row.addWidget(b)
         self.mode_group.setExclusive(True)
-        root.addWidget(box)
+        l1.addWidget(box)
 
         fbox = QGroupBox("Sources")
         fl = QVBoxLayout(fbox)
@@ -137,7 +199,7 @@ class Window(QWidget):
             fl.addLayout(fr)
         self.main_btn[self.main].setChecked(True)
         self.sub_btn[self.sub].setChecked(True)
-        root.addWidget(fbox)
+        l1.addWidget(fbox)
 
         pbox = QGroupBox("PIP window")
         pl = QVBoxLayout(pbox)
@@ -167,7 +229,7 @@ class Window(QWidget):
             srow.addWidget(b)
         self.size_btn[SIZES["Medium"]].setChecked(True)
         pl.addLayout(srow)
-        root.addWidget(pbox)
+        l1.addWidget(pbox)
 
         abox = QGroupBox("Ambiglow")
         al = QVBoxLayout(abox)
@@ -199,18 +261,23 @@ class Window(QWidget):
             arow.addWidget(b)
             self.ambi_btns.append(b)
         al.addLayout(arow)
-        aval = QLabel("The OSD presets cannot be read from USB: after \"Back to monitor OSD\" the LEDs stay dark "
-                      "until you pick a preset in the OSD.")
+        aval = QLabel("The monitor's own presets can be read but not chosen from USB: after \"Back to monitor OSD\" "
+                      "the LEDs stay dark until you pick a preset in the OSD.")
         aval.setWordWrap(True)
         aval.setStyleSheet("color: gray; font-size: 11px;")
         al.addWidget(aval)
-        root.addWidget(abox)
+        self.osd_label = QLabel("Monitor OSD setting: …")
+        l2.addWidget(self.osd_label)
+        l2.addWidget(abox)
+        l2.addStretch(1)
         self.ambi_rgb = amb.COLORS["white"]
 
         nota = QLabel("The monitor sends its USB (KVM) to the left/main picture.\n"
                       "If the main source is not this PC, control is lost until you switch back with the remote.")
         nota.setStyleSheet("color: gray; font-size: 11px;")
-        root.addWidget(nota)
+        l1.addWidget(nota)
+        l1.addStretch(1)
+        self.build_settings(l3)
 
         self.controls = (list(self.mode_btn.values()) + list(self.pos_btn.values()) + list(self.size_btn.values())
                          + list(self.main_btn.values()) + list(self.sub_btn.values()))
@@ -267,10 +334,85 @@ class Window(QWidget):
         if self.mode == "pip":
             self.run_apply("pip", "PIP size changed")
 
+    def build_settings(self, layout):
+        self.set_combo = {}
+        for group, title in (("general", "General"), ("panel", "OLED panel care")):
+            gb = QGroupBox(title)
+            gl = QGridLayout(gb)
+            for r, s in enumerate(x for x in st.SETTINGS if x.group == group):
+                lab = QLabel(s.label)
+                cb = QComboBox()
+                for v, name in s.values.items():
+                    cb.addItem(name, v)
+                cb.setEnabled(False)
+                cb.activated.connect(lambda _i, k=s.key, c=cb: self.change_setting(k, c.currentData()))
+                gl.addWidget(lab, r, 0)
+                gl.addWidget(cb, r, 1)
+                self.set_combo[s.key] = cb
+            layout.addWidget(gb)
+        self.refresh_label = QLabel("Time since the last pixel refresh: …")
+        layout.addWidget(self.refresh_label)
+        self.refresh_btn = QPushButton("Run pixel refresh…")
+        self.refresh_btn.clicked.connect(self.confirm_pixel_refresh)
+        layout.addWidget(self.refresh_btn)
+        hint = QLabel("Pixel refresh is an OLED maintenance cycle: the panel is unusable while it runs.")
+        hint.setStyleSheet("color: gray; font-size: 11px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addStretch(1)
+
+    def on_tab(self, i):
+        if i == 1:
+            self.pool.start(JobR(read_osd, self.sig, "osd"))
+        elif i == 2:
+            self.pool.start(JobR(read_settings, self.sig, "settings"))
+
+    def change_setting(self, key, value):
+        self.status.setText("Sending to the monitor…")
+        self.pool.start(JobR(lambda: write_setting(key, value), self.sig, "setting-written"))
+
+    def confirm_pixel_refresh(self):
+        r = QMessageBox.warning(
+            self, "Pixel refresh",
+            "This starts the OLED pixel-refresh cycle. The panel cannot be used while it runs.\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if r == QMessageBox.Yes:
+            self.pool.start(Job(do_pixel_refresh, self.sig, ok_text="Pixel refresh started"))
+
+    def on_result(self, tag, value):
+        if tag == "settings":
+            vals, since = value
+            for key, cb in self.set_combo.items():
+                v = vals.get(key)
+                i = cb.findData(v) if v is not None else -1
+                cb.setEnabled(i >= 0)
+                if i >= 0:
+                    cb.setCurrentIndex(i)
+            self.refresh_label.setText("Time since the last pixel refresh: "
+                                       + (f"{since[0]} h {since[1]} min" if since else "unknown"))
+        elif tag == "setting-written":
+            key, v = value
+            s = st.BY_KEY[key]
+            self.status.setText(f"✔ {s.label}: {st.label(s, v)}")
+            cb = self.set_combo[key]
+            if cb.findData(v) >= 0:
+                cb.setCurrentIndex(cb.findData(v))
+        elif tag == "osd":
+            if value == "n/a":
+                text = "Ambiglow controller not reachable (USB cable on another computer)."
+            elif value is None:
+                text = "FreEvnia has the LEDs now. \"Back to monitor OSD\" shows the OSD setting again."
+            elif not value:
+                text = "Monitor OSD setting: Off"
+            else:
+                text = "Monitor OSD setting: " + " + ".join(f"{m} ({b.lower()})" for m, b in value)
+            self.osd_label.setText(text)
+
     def ambi_run(self, action, rgb=None):
         lvl = self.ambi_level.value()
         text = {"color": "Ambiglow colour set", "off": "Ambiglow off", "release": "Ambiglow back to the OSD"}[action]
         self.pool.start(Job(lambda: ambi(action, rgb, lvl), self.sig, ok_text=text))
+        QTimer.singleShot(800, lambda: self.pool.start(JobR(read_osd, self.sig, "osd")))
 
     def set_ambi(self, rgb):
         self.ambi_rgb = rgb

@@ -69,4 +69,12 @@ MIT. [English README](README.md).
 
 ## Ambiglow
 
-`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <color>`, `status`; la ventana tiene un panel de color. Los presets del OSD no se pueden leer ni elegir por USB: tras `release` los LEDs quedan apagados hasta que elijas un preset en el OSD. Ver PROTOCOL.md.
+`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <color>`, `status`; la ventana tiene un panel de color. Los presets del propio monitor se pueden leer (`ambiglow info`) pero no elegir por USB: tras `release` los LEDs quedan apagados hasta que elijas un preset en el OSD. Ver PROTOCOL.md.
+
+## Ajustes del monitor y cuidado del panel OLED
+
+`freevnia settings` los lista; `freevnia settings <clave> <valor>` cambia uno (Power LED, aviso de resolución,
+CEC, Pixel Orbiting, Screen Saver, Multi-Logo Protection, Boundary/Taskbar Dimmer, protección térmica, aviso
+automático). La ventana tiene una pestaña *Settings*. `freevnia pixel-refresh --yes` arranca el ciclo de
+refresco de píxeles del OLED (mantenimiento; el panel no se puede usar mientras dura). `freevnia ambiglow info`
+muestra el ajuste de Ambiglow del propio monitor. Ver PROTOCOL.md.

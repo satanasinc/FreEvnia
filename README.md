@@ -93,4 +93,12 @@ MIT - see [LICENSE](LICENSE). [README en español](README.es.md).
 
 ## Ambiglow
 
-`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <colour>`, `status`; the GUI has a colour panel. The OSD presets cannot be read or selected over USB: after `release` the LEDs stay dark until you pick a preset in the OSD. See PROTOCOL.md.
+`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <colour>`, `status`; the GUI has a colour panel. The monitor's own presets can be read (`ambiglow info`) but not selected over USB: after `release` the LEDs stay dark until you pick a preset in the OSD. See PROTOCOL.md.
+
+## Monitor settings and OLED panel care
+
+`freevnia settings` lists them; `freevnia settings <key> <value>` changes one (Power LED, resolution notice,
+CEC, Pixel Orbiting, Screen Saver, Multi-Logo Protection, Boundary/Taskbar Dimmer, Thermal Protection, Auto
+Warning). The GUI has a *Settings* tab. `freevnia pixel-refresh --yes` starts the OLED pixel-refresh cycle (a
+maintenance action; the panel is unusable while it runs). `freevnia ambiglow info` shows the monitor's own
+Ambiglow setting. See PROTOCOL.md.

@@ -134,6 +134,45 @@ write `40 / 80 / 0 / <addr>`.
 - Release: write back the 64-byte region `0xE020..0xE05F` that was there before taking control.
 - The controller keeps showing whatever is in the colour buffer, so FreEvnia also saves and restores
   `0xE100..0xE183`.
-- The OSD settings (off, the 7 presets) are **not** visible in these registers. After releasing, the LEDs
-  keep the restored buffer (dark) until a preset is picked in the OSD.
+- The OSD setting **is** visible in the control region (byte 1 of each 16-byte block = effect, byte 9 =
+  brightness; values from the official `MNTLightEffect_E` / `Bright_E` enums: 0 off, 1 static, 2 static
+  rainbow, 3 color shift, 5 wave, 7 breathing, 9 follow audio, 11 follow video, 12 starry night, ...;
+  brightness 0 brightest, 2 brighter, 4 bright). It is read-only: writing those bytes, with or without the
+  official library's extra `0x23 = 4` write, did not change the monitor (checked with a camera).
+- After releasing, the LEDs keep the restored buffer (dark) until a preset is picked in the OSD.
+- Static colour is read from the LED buffer `0xE100` even with byte 0 = 0 and the OSD mode "static"; the
+  moving effects need the monitor's own state and cannot be started from USB.
 - Needs the udev rule for `0cf2:b20b` (see `udev/99-freevnia.rules`).
+
+
+## Settings: Power LED, resolution notice, CEC, OLED panel care (verified read and write)
+
+The monitor's capability string (`Get Capabilities`, request `0xF3`, 1473 bytes in 32-byte chunks, offset in the
+request) lists the supported VCP codes. Philips extended codes appear as **three bytes**, e.g. `E2A017(00 01)`.
+They are read and written like any other VCP code, with the 3-byte code instead of the 1-byte one:
+
+```
+Get VCP : 01 e2 a0 17            reply 02 00 e2 01 <max hi> <max lo> <cur hi> <cur lo>
+Set VCP : 03 e2 a0 17 <hi> <lo>
+```
+
+The reply only echoes the first byte (`e2`), so a stale answer for another extended code looks valid: ask again
+and accept the value only when two consecutive answers agree (what `freevnia.usbddc.get_vcp` does).
+
+| Setting | Code | Values |
+|---|---|---|
+| Power LED | `0xF2` | 0-4 |
+| Resolution notice | `0xE9` | 0 off, 2 on |
+| CEC | `0xE2A017` | 0 off, 1 on |
+| Pixel Orbiting | `0xE2A034` | 0 off, 2 slow, 3 normal, 4 fast |
+| Screen Saver | `0xE2A035` | 0 off, 2 slow, 3 fast |
+| Multi-Logo Protection | `0xE2A048` | 0-2 |
+| Boundary Dimmer | `0xE2A049` | 0-3 |
+| Taskbar Dimmer | `0xE2A04A` | 0-3 |
+| Thermal Protection | `0xE2A04B` | 0 off, 1 on |
+| Auto Warning | `0xE2A043` | 0 off, 1 on |
+| Time since last pixel refresh | `0xE2A050` / `51` / `53` | hours = (50 << 8) \| 51, minutes = 53 |
+| Pixel Refresh (action) | `0xE2A036` | only `1` (starts a maintenance cycle; **not run during development**) |
+
+Names of the dimmer / multi-logo levels are not known; only the numbers are. The OLED working-time and counter
+codes (`E2A04D`-`4F`, `E2A054`, `E2A055`) answer with the default (`cur=0, max=255`) and are not exposed.
