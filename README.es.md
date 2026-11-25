@@ -53,8 +53,8 @@ freevnia-gui                             # la ventana
 
 * **El monitor manda su USB (KVM) a la imagen principal, la de la izquierda.** Si pones *otro* aparato como
   fuente principal, este equipo pierde el hub y **no puede volver**: hará falta el mando.
-* Siempre se sabe si hay PBP/PIP activo (`0xE6`). El modo, la esquina y el tamaño se pueden leer tras
-  ponerlos desde FreEvnia; que refleje lo puesto con el mando aún no está confirmado.
+* Siempre se sabe si hay PBP/PIP activo (`0xE6`). El modo, la esquina y el tamaño solo se leen si los pusiste
+  desde FreEvnia; lo que eliges con el **mando no se puede leer** (el monitor no lo informa).
 * Escribe en la configuración del monitor. Usa los mismos comandos que el programa oficial, pero es software
   alfa: **úsalo bajo tu responsabilidad**, sin garantía (ver [LICENSE](LICENSE)).
 

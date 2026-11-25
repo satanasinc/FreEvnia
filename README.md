@@ -70,8 +70,8 @@ A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-to
 * **The monitor sends its USB (KVM) to the left / main picture.** If you make *another* device the main
   source, this computer loses the hub and **cannot switch back** - you will need the remote. The GUI asks
   for confirmation before changing the main source.
-* The GUI always knows whether PBP/PIP is active (`0xE6`). Mode, corner and size read back after you set them
-  from FreEvnia; whether the remote's choices are reflected is not confirmed yet.
+* The GUI always knows whether PBP/PIP is active (`0xE6`). Mode, corner and size read back only for what you set
+  from FreEvnia; what you choose with the **remote cannot be read** (the monitor does not report it).
 * This writes to your monitor's configuration. It uses the same commands as the official app, but it is
   alpha software: **use at your own risk**, no warranty (see [LICENSE](LICENSE)).
 

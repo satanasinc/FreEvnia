@@ -91,7 +91,8 @@ Writing `0xA5` alone does nothing. The official software sends, in this order, w
   running these commands loses the hub and **cannot switch back**; use the remote.
 * After you set a mode from software, `0xA5` (mode) and `0xEC` (position/size) **read back** the values you
   wrote (e.g. PIP lower-left large reads `0xA5=0x0100`, `0xEC=0x0403`), and `0xE6` tells whether PBP/PIP is active.
-  Whether changes made with the **remote** are reflected in `0xA5`/`0xEC` has not been confirmed.
+  Changes made with the **remote are NOT reflected** in `0xA5`/`0xEC` (they stay at the last software value, or 0):
+  with a PIP set from the remote, `0xE6` = 0 and the second-source byte of `0x60` change, but `0xA5` and `0xEC` read 0.
 * The reply buffer keeps the **previous** answer until the monitor prepares a new one, so a Get VCP must check that the
   reply is for the code you asked about and retry otherwise (FreEvnia does).
 * Values written to `0x60` that equal the current one do nothing.
