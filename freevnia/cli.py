@@ -4,11 +4,40 @@ import sys
 
 import usb.core
 
+from . import ambiglow as amb
 from . import usbddc as u
 
 
 def to_int(s: str) -> int:
     return int(s, 0)
+
+
+def run_ambiglow(a):
+    try:
+        dev = amb.find_device()
+        if a.action == "status":
+            print("software control" if amb.is_captured(dev) else "monitor OSD control")
+        elif a.action == "color":
+            if not a.value:
+                sys.exit("color needs a colour (name or #RRGGBB)")
+            amb.solid(dev, amb.parse_color(a.value), a.zone, a.brightness)
+        elif a.action == "off":
+            amb.off(dev)
+        elif a.action == "release":
+            amb.release(dev)
+        elif a.action in ("rainbow", "breathe"):
+            try:
+                if a.action == "rainbow":
+                    amb.rainbow(dev, a.speed, a.brightness)
+                else:
+                    amb.breathe(dev, amb.parse_color(a.value or "white"), a.speed, a.brightness)
+            except KeyboardInterrupt:
+                pass
+            amb.release(dev)
+    except amb.AmbiglowNotFound as e:
+        sys.exit(str(e))
+    except (ValueError, usb.core.USBError) as e:
+        sys.exit(f"error talking to the Ambiglow controller: {e}")
 
 
 def main(argv=None):
@@ -27,8 +56,16 @@ def main(argv=None):
     m.add_argument("--sub", choices=list(u.SRC_SUB), default="usbc")
     m.add_argument("--size", choices=list(u.PIP_SIZE), default="medium")
     m.add_argument("--position", choices=list(u.PIP_POSITION), default="upper-right")
+    am = sub.add_parser("ambiglow", help="Ambiglow LEDs: color | off | release | rainbow | breathe | status")
+    am.add_argument("action", choices=["color", "off", "release", "rainbow", "breathe", "status"])
+    am.add_argument("value", nargs="?", help="colour name or #RRGGBB (for color / breathe)")
+    am.add_argument("--zone", choices=list(amb.ZONES), default="all")
+    am.add_argument("--brightness", type=int, default=100, help="0-100 %%")
+    am.add_argument("--speed", type=float, default=1.0, help="effect speed (default 1)")
     a = ap.parse_args(argv)
 
+    if a.cmd == "ambiglow":
+        return run_ambiglow(a)
     try:
         dev = u.find_device()
         if a.cmd == "info":

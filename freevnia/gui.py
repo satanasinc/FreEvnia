@@ -9,10 +9,12 @@ import sys
 import threading
 
 import usb.core
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QGridLayout, QGroupBox, QHBoxLayout,
-                               QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QColorDialog, QGridLayout, QGroupBox, QHBoxLayout,
+                               QLabel, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget)
 
+from . import ambiglow as amb
 from . import usbddc as p
 
 LOCK = threading.Lock()          # one USB access at a time (polling and commands)
@@ -36,6 +38,18 @@ def read_state():
             return "on" if p.get_vcp(dev, 0xE6)["cur"] == 0 else "full"
         except Exception:
             return "err"
+
+
+def ambi(action, rgb=None, brightness=100):
+    """Run one Ambiglow action under the USB lock (the LEDs are a separate USB device)."""
+    with LOCK:
+        dev = amb.find_device()
+        if action == "color":
+            amb.solid(dev, rgb, "all", brightness)
+        elif action == "off":
+            amb.off(dev)
+        elif action == "release":
+            amb.release(dev)
 
 
 def apply(mode, loc, size, main="dp1", sub="usbc"):
@@ -155,6 +169,44 @@ class Window(QWidget):
         pl.addLayout(srow)
         root.addWidget(pbox)
 
+        abox = QGroupBox("Ambiglow")
+        al = QVBoxLayout(abox)
+        crow = QHBoxLayout()
+        self.ambi_btns = []
+        for name in ("white", "warm", "red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"):
+            r, g, b = amb.COLORS[name]
+            sw = QPushButton()
+            sw.setFixedSize(30, 30)
+            sw.setToolTip(name)
+            sw.setStyleSheet(f"background-color: rgb({r},{g},{b}); border: 1px solid gray;")
+            sw.clicked.connect(lambda _=False, c=amb.COLORS[name]: self.set_ambi(c))
+            crow.addWidget(sw)
+            self.ambi_btns.append(sw)
+        al.addLayout(crow)
+        brow = QHBoxLayout()
+        brow.addWidget(QLabel("Brightness"))
+        self.ambi_level = QSlider(Qt.Horizontal)
+        self.ambi_level.setRange(5, 100)
+        self.ambi_level.setValue(100)
+        self.ambi_level.sliderReleased.connect(lambda: self.set_ambi(self.ambi_rgb))
+        brow.addWidget(self.ambi_level)
+        al.addLayout(brow)
+        arow = QHBoxLayout()
+        for text, fn in (("Other colour…", self.pick_ambi), ("Off", lambda: self.ambi_run("off")),
+                         ("Back to monitor OSD", lambda: self.ambi_run("release"))):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _=False, f=fn: f())
+            arow.addWidget(b)
+            self.ambi_btns.append(b)
+        al.addLayout(arow)
+        aval = QLabel("The OSD presets cannot be read from USB: after \"Back to monitor OSD\" the LEDs stay dark "
+                      "until you pick a preset in the OSD.")
+        aval.setWordWrap(True)
+        aval.setStyleSheet("color: gray; font-size: 11px;")
+        al.addWidget(aval)
+        root.addWidget(abox)
+        self.ambi_rgb = amb.COLORS["white"]
+
         nota = QLabel("The monitor sends its USB (KVM) to the left/main picture.\n"
                       "If the main source is not this PC, control is lost until you switch back with the remote.")
         nota.setStyleSheet("color: gray; font-size: 11px;")
@@ -214,6 +266,20 @@ class Window(QWidget):
         self.size = val
         if self.mode == "pip":
             self.run_apply("pip", "PIP size changed")
+
+    def ambi_run(self, action, rgb=None):
+        lvl = self.ambi_level.value()
+        text = {"color": "Ambiglow colour set", "off": "Ambiglow off", "release": "Ambiglow back to the OSD"}[action]
+        self.pool.start(Job(lambda: ambi(action, rgb, lvl), self.sig, ok_text=text))
+
+    def set_ambi(self, rgb):
+        self.ambi_rgb = rgb
+        self.ambi_run("color", rgb)
+
+    def pick_ambi(self):
+        c = QColorDialog.getColor(QColor(*self.ambi_rgb), self, "Ambiglow colour")
+        if c.isValid():
+            self.set_ambi((c.red(), c.green(), c.blue()))
 
     def poll(self):
         if not self.busy:

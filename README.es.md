@@ -66,3 +66,7 @@ otros modelos, y empaquetado (PyPI, AUR, Flatpak) y widget de Plasma.
 ## Licencia
 
 MIT. [English README](README.md).
+
+## Ambiglow
+
+`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <color>`, `status`; la ventana tiene un panel de color. Los presets del OSD no se pueden leer ni elegir por USB: tras `release` los LEDs quedan apagados hasta que elijas un preset en el OSD. Ver PROTOCOL.md.

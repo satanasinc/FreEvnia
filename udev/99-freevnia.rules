@@ -2,3 +2,6 @@
 # (DDC/CI over USB). Install: sudo cp udev/99-freevnia.rules /etc/udev/rules.d/ && sudo udevadm control --reload
 # then re-plug the monitor's USB cable (or: sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109).
 SUBSYSTEM=="usb", ATTR{idVendor}=="2109", ATTR{idProduct}=="8884", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+
+# Ambiglow LED controller (ENE) of the same monitor
+SUBSYSTEM=="usb", ATTR{idVendor}=="0cf2", ATTR{idProduct}=="b20b", MODE="0660", GROUP="plugdev", TAG+="uaccess"

@@ -122,3 +122,18 @@ Writing `0xA5` alone does nothing. The official software sends, in this order, w
    how the application builds a "set input source" request. No vendor code is included in this repository.
 
 This is independent interoperability work, **not affiliated with Philips or TPV**.
+
+## Ambiglow LEDs (ENE, USB `0cf2:b20b`) — verified on the 49M2C8900L under Linux
+
+Protocol found by [tomasf/evnia](https://github.com/tomasf/evnia) (macOS, PID `0xB201`); the same
+transfers work on PID `0xB20B`. Vendor control transfers on endpoint 0: read `C0 / 81 / 0 / <addr>`,
+write `40 / 80 / 0 / <addr>`.
+
+- `0xE020` and `0xE030`: write `01 00 02 04 00 05 00 00 00 02 FF 00 00 00 00 01` to take software control.
+- `0xE100..0xE183`: 44 LEDs x `R G B`. Red, green and blue were seen correctly on the panel.
+- Release: write back the 64-byte region `0xE020..0xE05F` that was there before taking control.
+- The controller keeps showing whatever is in the colour buffer, so FreEvnia also saves and restores
+  `0xE100..0xE183`.
+- The OSD settings (off, the 7 presets) are **not** visible in these registers. After releasing, the LEDs
+  keep the restored buffer (dark) until a preset is picked in the OSD.
+- Needs the udev rule for `0cf2:b20b` (see `udev/99-freevnia.rules`).

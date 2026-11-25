@@ -90,3 +90,7 @@ A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-to
 ## License
 
 MIT - see [LICENSE](LICENSE). [README en español](README.es.md).
+
+## Ambiglow
+
+`freevnia ambiglow color red|#ff8800 [--zone all|sides|top|center] [--brightness 50]`, `off`, `release`, `rainbow`, `breathe <colour>`, `status`; the GUI has a colour panel. The OSD presets cannot be read or selected over USB: after `release` the LEDs stay dark until you pick a preset in the OSD. See PROTOCOL.md.
