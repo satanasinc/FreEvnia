@@ -221,6 +221,7 @@ def osd_state(dev):
 # Names from the official library. These are the values the OSD stores. Do NOT write E2A038 ("Ambiglow Set"):
 # in the official app it is part of EffectReset() and restores the factory settings.
 DDC_MODE, DDC_COLOR, DDC_POSITION, DDC_BRIGHTNESS, DDC_SPEED = 0xE2A019, 0xE2A01A, 0xE2A01B, 0xE2A01C, 0xE2A01D
+DDC_STATIC = 7
 DDC_MODES = {0: "Off", 1: "Follow video", 2: "Follow audio", 3: "Color shift", 4: "Color wave",
              5: "Color breathing", 6: "Starry night", 7: "Static"}
 DDC_COLORS = {0: "Rainbow", 1: "White", 2: "Red", 3: "Rose", 4: "Magenta", 5: "Violet", 6: "Blue",
@@ -253,3 +254,97 @@ def ddc_apply(ddc, **kw):
                 raise ValueError(f"{k}: {kw[k]} is not one of {sorted(table)}")
             u.set_vcp(ddc, code, kw[k])
             time.sleep(0.3)
+
+
+# --- software rendering of the OSD effects ---------------------------------------------------
+# The monitor stores the mode but only draws "follow video" (and off) itself; for the other modes the LED
+# controller shows whatever the PC puts in the colour buffer, so FreEvnia draws them.
+import math
+import threading
+
+# LED slots seen from the front (tomasf/evnia notes); the position setting picks which ones are used.
+POSITION_LEDS = {0: list(range(0, 44)), 2: list(range(24, 44)), 4: list(range(0, 24))}
+DDC_COLOR_RGB = {1: (255, 255, 255), 2: (255, 0, 0), 3: (255, 0, 128), 4: (255, 0, 255), 5: (128, 0, 255),
+                 6: (0, 0, 255), 7: (0, 128, 255), 8: (0, 255, 255), 9: (0, 255, 128), 10: (0, 255, 0),
+                 11: (128, 255, 0), 12: (255, 255, 0), 13: (255, 128, 0)}
+BRIGHTNESS_PCT = {0: 40, 1: 70, 2: 100}
+SPEED_FACTOR = {0: 0.5, 1: 1.0, 2: 2.0}
+SOFTWARE_MODES = (3, 4, 5, 6, 7)          # color shift, wave, breathing, starry night, static
+
+
+def _hue(h):
+    r, g, b = colorsys.hsv_to_rgb(h % 1.0, 1.0, 1.0)
+    return (round(r * 255), round(g * 255), round(b * 255))
+
+
+def render_frame(mode, color, position, brightness, speed, t):
+    """One frame (44 RGB tuples) of an OSD effect at time t seconds. color 0 = rainbow."""
+    leds = POSITION_LEDS.get(position, POSITION_LEDS[0])
+    pct, sp = BRIGHTNESS_PCT.get(brightness, 100), SPEED_FACTOR.get(speed, 1.0)
+    base = DDC_COLOR_RGB.get(color)               # None -> rainbow
+    frame = [(0, 0, 0)] * LED_COUNT
+    n = len(leds)
+    for k, i in enumerate(leds):
+        pos = k / max(1, n)
+        if mode == 7:                              # static
+            rgb = base or _hue(pos)
+        elif mode == 3:                            # color shift: the whole strip cycles through hues
+            rgb = _hue(t * 0.1 * sp)
+        elif mode == 4:                            # color wave: a wave travels along the strip
+            if base is None:
+                rgb = _hue(pos - t * 0.15 * sp)
+            else:
+                lvl = (math.sin(2 * math.pi * (pos - t * 0.3 * sp)) + 1) / 2
+                rgb = scale(base, 15 + 85 * lvl)
+        elif mode == 5:                            # breathing
+            lvl = (math.sin(t * 1.6 * sp) + 1) / 2
+            rgb = scale(base or _hue(t * 0.04 * sp), 8 + 92 * lvl)
+        elif mode == 6:                            # starry night: twinkling stars on a dark blue sky
+            phase = (i * 0.618033) % 1.0 * 2 * math.pi
+            freq = 0.5 + ((i * 37) % 11) / 11
+            star = max(0.0, math.sin(t * freq * sp + phase)) ** 10
+            sky = scale((20, 30, 90), 100)
+            rgb = tuple(min(255, round(s + (255 - s) * star)) for s in sky) if base is None \
+                else tuple(min(255, round(c * (0.12 + 0.88 * star))) for c in base)
+        else:
+            rgb = (0, 0, 0)
+        frame[i] = scale(rgb, pct)
+    return frame
+
+
+def draw(dev, mode, color, position, brightness, speed, t=0.0):
+    """Take the LEDs and show one frame (enough for the static mode)."""
+    capture(dev)
+    push(dev, render_frame(mode, color, position, brightness, speed, t))
+
+
+class EffectRunner(threading.Thread):
+    """Animates an OSD effect until stop() is called. `lock` serialises USB access with the rest of the program."""
+
+    def __init__(self, dev, mode, color, position, brightness, speed, lock=None):
+        super().__init__(daemon=True)
+        self.dev, self.params, self.lock = dev, (mode, color, position, brightness, speed), lock
+        self._stop_evt = threading.Event()
+        self.error = None
+
+    def stop(self):
+        self._stop_evt.set()
+
+    def run(self):
+        t0 = time.monotonic()
+        try:
+            if self.lock:
+                with self.lock:
+                    capture(self.dev)
+            else:
+                capture(self.dev)
+            while not self._stop_evt.is_set():
+                frame = render_frame(*self.params, time.monotonic() - t0)
+                if self.lock:
+                    with self.lock:
+                        push(self.dev, frame)
+                else:
+                    push(self.dev, frame)
+                self._stop_evt.wait(0.04)
+        except Exception as e:      # USB unplugged, etc.
+            self.error = e

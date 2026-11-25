@@ -80,3 +80,9 @@ refresco de píxeles del OLED (mantenimiento; el panel no se puede usar mientras
 muestra el ajuste de Ambiglow del propio monitor. Ver PROTOCOL.md.
 
 `freevnia ambiglow info` muestra el ajuste de Ambiglow del monitor; `freevnia ambiglow set --osd-mode "Follow video" --osd-brightness Brightest` lo cambia. Los colores fijos los pinta FreEvnia; `release` devuelve las luces al monitor a través del propio monitor.
+
+El monitor solo dibuja por sí mismo *seguir vídeo* (y *apagado*). *Estático, cambio de color, onda, respiración y
+noche estrellada* los dibuja FreEvnia con el color, posición, brillo y velocidad guardados en el monitor: la ventana
+lo hace al cambiar el modo y `freevnia ambiglow play` desde la consola. El estático se queda al cerrar el
+programa; los animados necesitan el programa abierto (al cerrar la ventana se devuelven las luces).
+*Seguir audio* se deja al monitor y no se ha probado.

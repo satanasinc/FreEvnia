@@ -67,6 +67,24 @@ def run_ambiglow(a):
             print("Monitor Ambiglow setting: " + amb.ddc_describe(vals))
             if amb.is_captured(dev):
                 print("(FreEvnia has the LEDs right now; `freevnia ambiglow release` gives them back)")
+        elif a.action == "play":
+            vals = amb.ddc_settings(u.find_device())
+            if vals["mode"] not in amb.SOFTWARE_MODES:
+                sys.exit(f"the monitor draws '{amb.DDC_MODES.get(vals['mode'])}' by itself; `play` is for "
+                         + ", ".join(amb.DDC_MODES[m] for m in amb.SOFTWARE_MODES))
+            print("playing: " + amb.ddc_describe(vals) + "  (Ctrl-C to stop)")
+            if vals["mode"] == 7:
+                amb.draw(dev, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
+            else:
+                r = amb.EffectRunner(dev, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
+                r.start()
+                try:
+                    while r.is_alive():
+                        time.sleep(0.5)
+                except KeyboardInterrupt:
+                    pass
+                r.stop(); r.join()
+                amb.release(dev, _ddc_or_none())
         elif a.action == "set":
             def pick(table, text):
                 if text is None:
@@ -126,8 +144,8 @@ def main(argv=None):
     se.add_argument("value", nargs="?")
     pr = sub.add_parser("pixel-refresh", help="start the OLED pixel-refresh cycle (maintenance action)")
     pr.add_argument("--yes", action="store_true", help="confirm")
-    am = sub.add_parser("ambiglow", help="Ambiglow LEDs: info | set | color | off | release | rainbow | breathe | status")
-    am.add_argument("action", choices=["color", "off", "release", "rainbow", "breathe", "status", "info", "set"])
+    am = sub.add_parser("ambiglow", help="Ambiglow LEDs: info | set | play | color | off | release | rainbow | breathe | status")
+    am.add_argument("action", choices=["color", "off", "release", "rainbow", "breathe", "status", "info", "set", "play"])
     am.add_argument("value", nargs="?", help="colour name or #RRGGBB (for color / breathe)")
     am.add_argument("--zone", choices=list(amb.ZONES), default="all")
     am.add_argument("--brightness", type=int, default=100, help="0-100 %%")

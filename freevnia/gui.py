@@ -42,8 +42,21 @@ def read_state():
             return "err"
 
 
+RUNNER = None                    # the animated effect currently drawn by FreEvnia (a thread)
+
+
+def stop_runner():
+    """Stop the animated effect. Must be called WITHOUT holding LOCK (the thread needs it to finish its frame)."""
+    global RUNNER
+    r, RUNNER = RUNNER, None
+    if r is not None:
+        r.stop()
+        r.join(timeout=2)
+
+
 def ambi(action, rgb=None, brightness=100):
     """Run one Ambiglow action under the USB lock (the LEDs are a separate USB device)."""
+    stop_runner()
     with LOCK:
         dev = amb.find_device()
         if action == "color":
@@ -136,12 +149,28 @@ def read_osd():
 
 
 def write_osd(**kw):
+    """Change the monitor's own Ambiglow setting and make the LEDs show it.
+
+    Follow video / follow audio / off are drawn by the monitor: FreEvnia lets go of the LEDs (clears its colour
+    buffer and rewrites the mode). The other modes are drawn by FreEvnia (static once, the rest in a thread)."""
+    global RUNNER
+    stop_runner()
     with LOCK:
-        dev = device()
-        if dev is None:
+        ddc = device()
+        if ddc is None:
             raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        amb.ddc_apply(dev, **kw)
-        return amb.ddc_settings(dev)
+        amb.ddc_apply(ddc, **kw)
+        vals = amb.ddc_settings(ddc)
+        led = amb.find_device()
+        if vals["mode"] not in amb.SOFTWARE_MODES:
+            amb.release(led, ddc)
+        elif vals["mode"] == amb.DDC_STATIC:
+            amb.draw(led, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
+    if vals["mode"] in amb.SOFTWARE_MODES and vals["mode"] != amb.DDC_STATIC:
+        RUNNER = amb.EffectRunner(amb.find_device(), vals["mode"], vals["color"], vals["position"],
+                                  vals["brightness"], vals["speed"], lock=LOCK)
+        RUNNER.start()
+    return vals
 
 
 class Window(QWidget):
@@ -343,6 +372,17 @@ class Window(QWidget):
         self.size = val
         if self.mode == "pip":
             self.run_apply("pip", "PIP size changed")
+
+    def closeEvent(self, event):
+        # An animated effect would freeze on its last frame: give the LEDs back before leaving.
+        if RUNNER is not None:
+            stop_runner()
+            try:
+                with LOCK:
+                    amb.release(amb.find_device(), device())
+            except Exception:
+                pass
+        event.accept()
 
     def build_osd_group(self, layout):
         gb = QGroupBox("Monitor's own Ambiglow setting (what the OSD stores)")

@@ -104,3 +104,9 @@ maintenance action; the panel is unusable while it runs). `freevnia ambiglow inf
 Ambiglow setting. See PROTOCOL.md.
 
 `freevnia ambiglow info` shows the monitor's Ambiglow setting; `freevnia ambiglow set --osd-mode "Follow video" --osd-brightness Brightest` changes it. Fixed colours are drawn by FreEvnia; `release` hands the LEDs back through the monitor itself.
+
+The monitor itself only draws *follow video* (and *off*). For *static, color shift, color wave, color breathing and
+starry night* FreEvnia draws the effect with the colour, position, brightness and speed stored in the monitor:
+the GUI does it when you change the mode, and `freevnia ambiglow play` does it from the shell. Static stays after
+the program exits; the animated ones need the program running (closing the window gives the LEDs back).
+*Follow audio* is left to the monitor and was not tested.
