@@ -24,7 +24,7 @@ def run_settings(a):
             st.pixel_refresh(dev)
             print("pixel refresh started")
         elif a.key is None:
-            groups = {"general": "General", "panel": "OLED panel care"}
+            groups = {"general": "General", "image": "Image and audio", "game": "Gaming", "panel": "OLED panel care"}
             cur = st.read_all(dev)
             for g, title in groups.items():
                 print(f"{title}:")

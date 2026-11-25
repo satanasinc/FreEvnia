@@ -69,17 +69,19 @@ def code_bytes(code: int) -> bytes:
     return bytes([code]) if code <= 0xFF else code.to_bytes(3, "big")
 
 
-def get_vcp(dev, code: int, retries: int = 5) -> dict:
+def get_vcp(dev, code: int, retries: int = 5, expect_max=None) -> dict:
     """Get VCP. The reply buffer keeps the previous answer until the monitor prepares a new one, so the
     reply is only accepted if it is for the code we asked about; otherwise we wait and ask again.
 
     Extended replies only echo the first byte (0xE2), so a stale answer for another extended code looks
-    valid: for those the same request must give the same answer twice in a row."""
+    valid: for those the same request must give the same answer twice in a row. If expect_max is given (the
+    largest value the capability string lists for the code), an answer with a different maximum is a stale
+    answer for another code and is asked again."""
     ext = code > 0xFF
     first = code_bytes(code)[0]
     last = ValueError("no reply")
     prev = None
-    for _ in range(retries + (2 if ext else 0)):
+    for _ in range(retries + (4 if ext else 0)):
         try:
             p = parse_reply(transact(dev, bytes([0x01]) + code_bytes(code)))
         except ValueError as e:
@@ -89,6 +91,11 @@ def get_vcp(dev, code: int, retries: int = 5) -> dict:
                 if p[1] != 0x00:
                     raise VcpRejected(f"monitor rejects VCP 0x{code:02x} (result {p[1]:#x})")
                 r = {"code": code, "type": p[3], "max": (p[4] << 8) | p[5], "cur": (p[6] << 8) | p[7]}
+                if expect_max is not None and r["max"] != expect_max:
+                    last = ValueError(f"answer with max {r['max']} is not for VCP 0x{code:02x} (expected {expect_max})")
+                    prev = None
+                    time.sleep(0.25)
+                    continue
                 if not ext or r == prev:
                     return r
                 prev = r

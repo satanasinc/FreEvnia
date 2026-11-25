@@ -37,7 +37,7 @@ def read_state():
         if dev is None:
             return None
         try:
-            return "on" if p.get_vcp(dev, 0xE6)["cur"] == 0 else "full"
+            return "on" if p.get_vcp(dev, 0xE6, retries=10)["cur"] == 0 else "full"
         except Exception:
             return "err"
 
@@ -371,7 +371,8 @@ class Window(QWidget):
 
     def build_settings(self, layout):
         self.set_combo = {}
-        for group, title in (("general", "General"), ("panel", "OLED panel care")):
+        for group, title in (("general", "General"), ("image", "Image and audio"), ("game", "Gaming"),
+                             ("panel", "OLED panel care")):
             gb = QGroupBox(title)
             gl = QGridLayout(gb)
             for r, s in enumerate(x for x in st.SETTINGS if x.group == group):
@@ -380,6 +381,9 @@ class Window(QWidget):
                 for v, name in s.values.items():
                     cb.addItem(name, v)
                 cb.setEnabled(False)
+                if s.note:
+                    cb.setToolTip(s.note)
+                    lab.setToolTip(s.note)
                 cb.activated.connect(lambda _i, k=s.key, c=cb: self.change_setting(k, c.currentData()))
                 gl.addWidget(lab, r, 0)
                 gl.addWidget(cb, r, 1)

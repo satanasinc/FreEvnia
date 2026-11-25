@@ -194,3 +194,19 @@ and written like the settings above and the monitor then rewrites the LED contro
   animation (buffer stayed empty).
 * Giving the LEDs back after software control: clear the buffer and write the current `E2A019` value back to itself;
   the monitor reconfigures the controller (verified with a camera). Restoring old register contents can be stale.
+
+### Picture mode, audio input and gaming settings (verified read; writes verified with a visible change on the crosshair)
+
+| Setting | Code | Values (from the capability string) |
+|---|---|---|
+| Picture mode (SmartImage) | `0xDC` | 0 Standard, 1 FPS, 3 Movie, 4 Game 1, 5 Game 2, 6 Racing, 7 RTS, 8 Economy, 11 Low blue, 14 EasyRead, 17 Console, 81 Illustrator (`0x20-0x24`, `0x30`, `0xE2` are also advertised and unnamed) |
+| Audio input | `0xE0` | 1 HDMI 1, 2 HDMI 2, 3 DisplayPort, 5 USB-C |
+| Adaptive Sync | `0xE2A040` | 0 off, 1 on |
+| Smart Crosshair | `0xE2A004` | 0 off, 1 on, 2 smart crosshair (a fixed crosshair drawn in the centre of the screen) |
+| Stark Shadow Boost | `0xE2A044` | 0 off, 1-3 (brightens dark areas) |
+| Smart Sniper zoom | `0xE2A006` | 0 off, 1 = 1x, 2 = 1.5x, 3 = 2x (magnified window of the screen centre) |
+| Smart Sniper position | `0xE2A025` | 0 center, 1 top |
+
+The monitor often answers a read with the *previous* reply (for extended codes the reply only echoes `e2`), so
+`get_vcp` can be given `expect_max`, the largest value in the capability string, and asks again when the
+answer's maximum does not match.
