@@ -176,3 +176,21 @@ and accept the value only when two consecutive answers agree (what `freevnia.usb
 
 Names of the dimmer / multi-logo levels are not known; only the numbers are. The OLED working-time and counter
 codes (`E2A04D`-`4F`, `E2A054`, `E2A055`) answer with the default (`cur=0, max=255`) and are not exposed.
+
+### Ambiglow settings over DDC (what the OSD stores)
+
+`E2A019` mode (0 off, 1 follow video, 2 follow audio, 3 color shift, 4 color wave, 5 color breathing, 6 starry
+night, 7 static), `E2A01A` colour (0 rainbow, 1 white, 2 red, 3 rose, 4 magenta, 5 violet, 6 blue, 7 azure,
+8 cyan, 9 aqua, 10 green, 11 pear, 12 yellow, 13 orange), `E2A01B` position (0 all zones, 2 central, 4 3-sided),
+`E2A01C` brightness (0 bright, 1 brighter, 2 brightest), `E2A01D` speed (0 low, 1 normal, 2 high). They are read
+and written like the settings above and the monitor then rewrites the LED controller registers itself
+(`E020` = `01 <effect> 00 04 00 05 ... ff`, effect numbering of the official `MNTLightEffect_E`).
+
+* **Do not write `E2A038` ("Ambiglow Set")**: in the official app it is part of `EffectReset()` and restores the
+  factory Ambiglow settings (it did on the test unit; the previous values had to be written back).
+* Only *follow video* is rendered by the monitor on its own. With the other modes the controller is in "host
+  draws" state: it shows whatever is in the colour buffer `0xE100` (zeros unless the PC writes them), so
+  *static* works if the PC fills the buffer, and *color shift / wave / breathing / starry night* showed no
+  animation (buffer stayed empty).
+* Giving the LEDs back after software control: clear the buffer and write the current `E2A019` value back to itself;
+  the monitor reconfigures the controller (verified with a camera). Restoring old register contents can be stale.

@@ -78,3 +78,5 @@ CEC, Pixel Orbiting, Screen Saver, Multi-Logo Protection, Boundary/Taskbar Dimme
 automático). La ventana tiene una pestaña *Settings*. `freevnia pixel-refresh --yes` arranca el ciclo de
 refresco de píxeles del OLED (mantenimiento; el panel no se puede usar mientras dura). `freevnia ambiglow info`
 muestra el ajuste de Ambiglow del propio monitor. Ver PROTOCOL.md.
+
+`freevnia ambiglow info` muestra el ajuste de Ambiglow del monitor; `freevnia ambiglow set --osd-mode "Follow video" --osd-brightness Brightest` lo cambia. Los colores fijos los pinta FreEvnia; `release` devuelve las luces al monitor a través del propio monitor.

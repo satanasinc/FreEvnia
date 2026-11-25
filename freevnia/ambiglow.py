@@ -94,12 +94,24 @@ def capture(dev):
     write(dev, ADDR_CTRL_B, CAPTURE_BLOCK)
 
 
-def release(dev):
-    """Give the LEDs back to the monitor OSD (restores the region and colours saved by capture()).
+def release(dev, ddc=None):
+    """Give the LEDs back to the monitor.
 
-    The controller keeps showing whatever is in the colour buffer, so the buffer is restored too
-    (black if nothing was saved). If the OSD look does not come back, pick any Ambiglow preset in
-    the OSD: it rewrites the colours."""
+    Best: with the DDC device (usbddc.find_device()), clear the colour buffer and write the monitor's own
+    Ambiglow mode back to itself; the monitor then reconfigures the LED controller by itself (verified with a
+    camera: a software blue goes back to the OSD state). Fallback without DDC: restore the control region and
+    colours saved by capture(), which can be stale if the OSD was touched in between."""
+    if ddc is not None:
+        try:
+            from . import usbddc as u
+            mode = u.get_vcp(ddc, DDC_MODE)["cur"]
+            write(dev, ADDR_FRAME, bytes(FRAME_LEN))
+            time.sleep(0.01)
+            u.set_vcp(ddc, DDC_MODE, mode)
+            time.sleep(0.5)
+            return
+        except (ValueError, usb.core.USBError):
+            pass
     try:
         saved = bytes.fromhex(BASELINE_FILE.read_text().strip())
         if len(saved) != REGION_LEN + FRAME_LEN or saved[0] == 1:
@@ -203,3 +215,41 @@ def osd_state(dev):
             continue          # an "Off" block has no brightness worth showing
         out.append((OSD_MODES.get(blk[1], f"mode {blk[1]}"), OSD_BRIGHTNESS.get(blk[9], f"level {blk[9]}")))
     return out
+
+
+# --- the monitor's own Ambiglow settings, over DDC/CI (extended VCP codes) ---------------------
+# Names from the official library. These are the values the OSD stores. Do NOT write E2A038 ("Ambiglow Set"):
+# in the official app it is part of EffectReset() and restores the factory settings.
+DDC_MODE, DDC_COLOR, DDC_POSITION, DDC_BRIGHTNESS, DDC_SPEED = 0xE2A019, 0xE2A01A, 0xE2A01B, 0xE2A01C, 0xE2A01D
+DDC_MODES = {0: "Off", 1: "Follow video", 2: "Follow audio", 3: "Color shift", 4: "Color wave",
+             5: "Color breathing", 6: "Starry night", 7: "Static"}
+DDC_COLORS = {0: "Rainbow", 1: "White", 2: "Red", 3: "Rose", 4: "Magenta", 5: "Violet", 6: "Blue",
+              7: "Azure", 8: "Cyan", 9: "Aqua", 10: "Green", 11: "Pear", 12: "Yellow", 13: "Orange"}
+DDC_POSITIONS = {0: "All zones", 2: "Central", 4: "3-sided"}      # the ones this monitor advertises
+DDC_BRIGHTNESS_LEVELS = {0: "Bright", 1: "Brighter", 2: "Brightest"}
+DDC_SPEEDS = {0: "Low", 1: "Normal", 2: "High"}
+DDC_FIELDS = {"mode": (DDC_MODE, DDC_MODES), "color": (DDC_COLOR, DDC_COLORS), "position": (DDC_POSITION, DDC_POSITIONS),
+              "brightness": (DDC_BRIGHTNESS, DDC_BRIGHTNESS_LEVELS), "speed": (DDC_SPEED, DDC_SPEEDS)}
+
+
+def ddc_settings(ddc) -> dict:
+    """{'mode': 1, 'color': 0, ...} as stored in the monitor."""
+    from . import usbddc as u
+    return {k: u.get_vcp(ddc, code)["cur"] for k, (code, _) in DDC_FIELDS.items()}
+
+
+def ddc_describe(values: dict) -> str:
+    return " · ".join(DDC_FIELDS[k][1].get(v, str(v)) for k, v in values.items())
+
+
+def ddc_apply(ddc, **kw):
+    """Write some of mode/color/position/brightness/speed (values are the raw numbers). Order matters little;
+    the mode goes last."""
+    from . import usbddc as u
+    for k in ("position", "brightness", "speed", "color", "mode"):
+        if kw.get(k) is not None:
+            code, table = DDC_FIELDS[k]
+            if kw[k] not in table:
+                raise ValueError(f"{k}: {kw[k]} is not one of {sorted(table)}")
+            u.set_vcp(ddc, code, kw[k])
+            time.sleep(0.3)

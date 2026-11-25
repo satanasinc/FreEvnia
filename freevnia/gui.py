@@ -51,7 +51,7 @@ def ambi(action, rgb=None, brightness=100):
         elif action == "off":
             amb.off(dev)
         elif action == "release":
-            amb.release(dev)
+            amb.release(dev, device())
 
 
 def apply(mode, loc, size, main="dp1", sub="usbc"):
@@ -129,10 +129,19 @@ def do_pixel_refresh():
 
 def read_osd():
     with LOCK:
-        try:
-            return amb.osd_state(amb.find_device())
-        except amb.AmbiglowNotFound:
+        dev = device()
+        if dev is None:
             return "n/a"
+        return amb.ddc_settings(dev)
+
+
+def write_osd(**kw):
+    with LOCK:
+        dev = device()
+        if dev is None:
+            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
+        amb.ddc_apply(dev, **kw)
+        return amb.ddc_settings(dev)
 
 
 class Window(QWidget):
@@ -261,13 +270,14 @@ class Window(QWidget):
             arow.addWidget(b)
             self.ambi_btns.append(b)
         al.addLayout(arow)
-        aval = QLabel("The monitor's own presets can be read but not chosen from USB: after \"Back to monitor OSD\" "
-                      "the LEDs stay dark until you pick a preset in the OSD.")
+        aval = QLabel("Fixed colours are drawn by FreEvnia. \"Back to monitor OSD\" gives the LEDs back to the "
+                      "monitor's own setting above.")
         aval.setWordWrap(True)
         aval.setStyleSheet("color: gray; font-size: 11px;")
         al.addWidget(aval)
         self.osd_label = QLabel("Monitor OSD setting: …")
         l2.addWidget(self.osd_label)
+        self.build_osd_group(l2)
         l2.addWidget(abox)
         l2.addStretch(1)
         self.ambi_rgb = amb.COLORS["white"]
@@ -334,6 +344,31 @@ class Window(QWidget):
         if self.mode == "pip":
             self.run_apply("pip", "PIP size changed")
 
+    def build_osd_group(self, layout):
+        gb = QGroupBox("Monitor's own Ambiglow setting (what the OSD stores)")
+        gl = QGridLayout(gb)
+        self.osd_combo = {}
+        for r, (field, (code, table)) in enumerate(amb.DDC_FIELDS.items()):
+            gl.addWidget(QLabel(field.capitalize()), r, 0)
+            cb = QComboBox()
+            for v, name in table.items():
+                cb.addItem(name, v)
+            cb.setEnabled(False)
+            cb.activated.connect(lambda _i, f=field, c=cb: self.change_osd(f, c.currentData()))
+            gl.addWidget(cb, r, 1)
+            self.osd_combo[field] = cb
+        note = QLabel("Follow video and Off are done by the monitor itself. The other effects are stored but "
+                      "need the PC to draw them: use the colours below for a fixed colour.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: gray; font-size: 11px;")
+        gl.addWidget(note, len(amb.DDC_FIELDS), 0, 1, 2)
+        layout.addWidget(gb)
+        QTimer.singleShot(300, lambda: self.pool.start(JobR(read_osd, self.sig, "osd")))
+
+    def change_osd(self, field, value):
+        self.status.setText("Sending to the monitor…")
+        self.pool.start(JobR(lambda: write_osd(**{field: value}), self.sig, "osd-written"))
+
     def build_settings(self, layout):
         self.set_combo = {}
         for group, title in (("general", "General"), ("panel", "OLED panel care")):
@@ -397,15 +432,20 @@ class Window(QWidget):
             cb = self.set_combo[key]
             if cb.findData(v) >= 0:
                 cb.setCurrentIndex(cb.findData(v))
-        elif tag == "osd":
+        elif tag in ("osd", "osd-written"):
             if value == "n/a":
-                text = "Ambiglow controller not reachable (USB cable on another computer)."
-            elif value is None:
-                text = "FreEvnia has the LEDs now. \"Back to monitor OSD\" shows the OSD setting again."
-            elif not value:
-                text = "Monitor OSD setting: Off"
+                text = "Ambiglow settings not reachable (the monitor's USB cable is on another computer)."
+                for cb in self.osd_combo.values():
+                    cb.setEnabled(False)
             else:
-                text = "Monitor OSD setting: " + " + ".join(f"{m} ({b.lower()})" for m, b in value)
+                text = "Monitor Ambiglow setting: " + amb.ddc_describe(value)
+                for field, cb in self.osd_combo.items():
+                    i = cb.findData(value[field])
+                    cb.setEnabled(True)
+                    if i >= 0:
+                        cb.setCurrentIndex(i)
+                if tag == "osd-written":
+                    self.status.setText("✔ " + text)
             self.osd_label.setText(text)
 
     def ambi_run(self, action, rgb=None):
