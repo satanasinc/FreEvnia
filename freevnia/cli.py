@@ -76,7 +76,7 @@ def run_ambiglow(a):
             if vals["mode"] == 7:
                 amb.draw(dev, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
             else:
-                r = amb.EffectRunner(dev, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
+                r = amb.make_runner(dev, vals)
                 r.start()
                 try:
                     while r.is_alive():

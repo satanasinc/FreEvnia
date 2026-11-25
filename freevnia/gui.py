@@ -169,9 +169,8 @@ def write_osd(**kw):
             amb.release(led, ddc)
         elif vals["mode"] == amb.DDC_STATIC:
             amb.draw(led, vals["mode"], vals["color"], vals["position"], vals["brightness"], vals["speed"])
-    if vals["mode"] in amb.SOFTWARE_MODES and vals["mode"] != amb.DDC_STATIC:
-        RUNNER = amb.EffectRunner(amb.find_device(), vals["mode"], vals["color"], vals["position"],
-                                  vals["brightness"], vals["speed"], lock=LOCK)
+    RUNNER = amb.make_runner(amb.find_device(), vals, lock=LOCK)
+    if RUNNER is not None:
         RUNNER.start()
     return vals
 
@@ -400,8 +399,9 @@ class Window(QWidget):
             cb.activated.connect(lambda _i, f=field, c=cb: self.change_osd(f, c.currentData()))
             gl.addWidget(cb, r, 1)
             self.osd_combo[field] = cb
-        note = QLabel("Follow video and Off are done by the monitor itself. The other effects are stored but "
-                      "need the PC to draw them: use the colours below for a fixed colour.")
+        note = QLabel("Off is done by the monitor itself. Follow video only works when chosen with the monitor's OSD "
+                      "buttons. FreEvnia draws follow audio (it listens to what the PC plays; speed = sensitivity) "
+                      "and the other effects while this window stays open.")
         note.setWordWrap(True)
         note.setStyleSheet("color: gray; font-size: 11px;")
         gl.addWidget(note, len(amb.DDC_FIELDS), 0, 1, 2)
@@ -493,6 +493,9 @@ class Window(QWidget):
                         cb.setCurrentIndex(i)
                 if tag == "osd-written":
                     self.status.setText("✔ " + text)
+                    if value["mode"] == 1:
+                        self.status.setText("✔ " + text + " — the monitor draws Follow video only when you pick it "
+                                            "with its own OSD buttons")
             self.osd_label.setText(text)
 
     def ambi_run(self, action, rgb=None):

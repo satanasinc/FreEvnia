@@ -274,7 +274,6 @@ DDC_COLOR_RGB = {1: (255, 255, 255), 2: (255, 0, 0), 3: (255, 0, 128), 4: (255, 
                  11: (128, 255, 0), 12: (255, 255, 0), 13: (255, 128, 0)}
 BRIGHTNESS_PCT = {0: 40, 1: 70, 2: 100}
 SPEED_FACTOR = {0: 0.5, 1: 1.0, 2: 2.0}
-SOFTWARE_MODES = (3, 4, 5, 6, 7)          # color shift, wave, breathing, starry night, static
 
 
 def _hue(h):
@@ -353,3 +352,95 @@ class EffectRunner(threading.Thread):
                 self._stop_evt.wait(0.04)
         except Exception as e:      # USB unplugged, etc.
             self.error = e
+
+
+# --- follow audio, drawn by FreEvnia -----------------------------------------------------------
+import array
+import subprocess
+
+AUDIO_MODE = 2
+
+
+class AudioRunner(threading.Thread):
+    """Follow audio: listens to what the PC plays (the default sink's monitor, via parec) and draws a level meter
+    along the selected LEDs. Same interface as EffectRunner."""
+
+    CHUNK = 640                               # samples per frame at 16 kHz = 40 ms
+
+    def __init__(self, dev, color, position, brightness, speed, lock=None):
+        super().__init__(daemon=True)
+        self.dev, self.lock = dev, lock
+        self.color, self.position, self.brightness, self.speed = color, position, brightness, speed
+        self._stop_evt = threading.Event()
+        self._proc = None
+        self.error = None
+
+    def stop(self):
+        self._stop_evt.set()
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except OSError:
+                pass
+
+    def _push(self, frame):
+        if self.lock:
+            with self.lock:
+                push(self.dev, frame)
+        else:
+            push(self.dev, frame)
+
+    def run(self):
+        try:
+            if self.lock:
+                with self.lock:
+                    capture(self.dev)
+            else:
+                capture(self.dev)
+            self._proc = subprocess.Popen(
+                ["parec", "-d", "@DEFAULT_MONITOR@", "--format=s16le", "--rate=16000", "--channels=1",
+                 "--latency-msec=30"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            leds = POSITION_LEDS.get(self.position, POSITION_LEDS[0])
+            n = len(leds)
+            pct = BRIGHTNESS_PCT.get(self.brightness, 100)
+            gain = {0: 0.8, 1: 1.0, 2: 1.4}.get(self.speed, 1.0)    # speed = sensitivity here
+            base = DDC_COLOR_RGB.get(self.color)
+            level, peak, t0 = 0.0, 0.02, time.monotonic()
+            while not self._stop_evt.is_set():
+                data = self._proc.stdout.read(self.CHUNK * 2)
+                if len(data) < self.CHUNK * 2:
+                    break
+                a = array.array("h")
+                a.frombytes(data)
+                rms = math.sqrt(sum(x * x for x in a) / len(a)) / 32768
+                peak = max(rms, peak * 0.995, 0.02)              # slow automatic gain
+                target = min(1.0, (rms / peak) * gain) if rms > 0.004 else 0.0
+                level += (target - level) * (0.7 if target > level else 0.15)    # fast attack, slow release
+                t = time.monotonic() - t0
+                frame = [(0, 0, 0)] * LED_COUNT
+                for k, i in enumerate(leds):
+                    lit = max(0.0, min(1.0, level * n * 1.1 - k))
+                    rgb = base or _hue(k / n + t * 0.05)
+                    frame[i] = scale(rgb, pct * lit)
+                self._push(frame)
+        except Exception as e:
+            self.error = e
+        finally:
+            if self._proc is not None:
+                try:
+                    self._proc.terminate()
+                except OSError:
+                    pass
+
+
+SOFTWARE_MODES = (2, 3, 4, 5, 6, 7)       # follow audio, color shift, wave, breathing, starry night, static
+
+
+def make_runner(dev, vals: dict, lock=None):
+    """The thread that animates `vals` (mode/color/position/brightness/speed), or None for the static mode."""
+    mode = vals["mode"]
+    if mode == AUDIO_MODE:
+        return AudioRunner(dev, vals["color"], vals["position"], vals["brightness"], vals["speed"], lock)
+    if mode in SOFTWARE_MODES and mode != DDC_STATIC:
+        return EffectRunner(dev, mode, vals["color"], vals["position"], vals["brightness"], vals["speed"], lock)
+    return None
