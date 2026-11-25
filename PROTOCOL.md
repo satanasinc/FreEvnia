@@ -210,3 +210,13 @@ and written like the settings above and the monitor then rewrites the LED contro
 The monitor often answers a read with the *previous* reply (for extended codes the reply only echoes `e2`), so
 `get_vcp` can be given `expect_max`, the largest value in the capability string, and asks again when the
 answer's maximum does not match.
+
+### Capture leftovers (important when giving the LEDs back)
+
+FreEvnia's software control writes the capture block `01 00 02 04 00 05 00 00 00 02 ff 00 00 00 00 01` to `E020`/`E030`.
+The monitor, when the mode is changed (OSD or DDC), only rewrites a few bytes of those blocks (mode, speed,
+brightness) and **leaves byte 0 (= 1, "the PC draws"), byte 3 (= 4), byte 10 (= 0xff) and byte 15 (= 1) as they
+were**. With those leftovers the controller stays in "the PC draws" state and the modes chosen with the remote
+control stop showing anything (seen on the test unit). `freevnia.ambiglow.release()` therefore clears bytes
+0, 3, 10 and 15 of every block after handing the mode back; the clean native state is
+`00 <mode> 00 00 00 05 00 00 00 <brightness> 00 00 00 00 00 00`.

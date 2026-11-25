@@ -94,6 +94,21 @@ def capture(dev):
     write(dev, ADDR_CTRL_B, CAPTURE_BLOCK)
 
 
+# Bytes of each 16-byte control block that FreEvnia's capture block sets (byte 0 = "the PC draws", 3 = brightness
+# of the app block, 10 = 0xff, 15 = 1) and that the monitor does NOT rewrite when it changes the mode: if they are
+# left behind the controller stays in "the PC draws" state and the modes chosen with the remote show nothing.
+CAPTURE_RESIDUE = (0, 3, 10, 15)
+
+
+def scrub(dev):
+    """Clear the capture leftovers in every control block, keeping what the monitor itself stores (mode, speed...)."""
+    region = bytearray(read(dev, ADDR_CTRL_A, REGION_LEN))
+    for base in range(0, REGION_LEN, 16):
+        for i in CAPTURE_RESIDUE:
+            region[base + i] = 0
+    write(dev, ADDR_CTRL_A, bytes(region))
+
+
 def release(dev, ddc=None):
     """Give the LEDs back to the monitor.
 
@@ -109,6 +124,7 @@ def release(dev, ddc=None):
             time.sleep(0.01)
             u.set_vcp(ddc, DDC_MODE, mode)
             time.sleep(0.5)
+            scrub(dev)
             return
         except (ValueError, usb.core.USBError):
             pass
@@ -121,6 +137,7 @@ def release(dev, ddc=None):
     write(dev, ADDR_FRAME, saved[REGION_LEN:])
     time.sleep(0.01)
     write(dev, ADDR_CTRL_A, saved[:REGION_LEN])
+    scrub(dev)
 
 
 def push(dev, leds):
