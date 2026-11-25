@@ -98,7 +98,7 @@ INFO_QUERIES = (("model", "e90d0000"), ("BOM", "e1e61d00"), ("firmware", "e1e606
 MODES = {"off": 0x0000, "pip": 0x0100, "pbp1": 0x0200}
 # Input codes. main = low byte of VCP 0x60, sub (second picture) = high byte.
 SRC_MAIN = {"dp1": 0x0F, "hdmi1": 0x11, "hdmi2": 0x12, "usbc": 0x15}   # dp1 and usbc verified
-SRC_SUB = {"usbc": 0x35, "hdmi1": 0x21, "hdmi2": 0x22}                  # usbc, hdmi2 verified (OSD)
+SRC_SUB = {"usbc": 0x35, "hdmi1": 0x21, "hdmi2": 0x22}                  # all verified
 # PIP window position (VCP 0xEC high byte) and size (low byte) - verified with a camera.
 PIP_POSITION = {"upper-right": 1, "lower-right": 2, "upper-left": 3, "lower-left": 4}
 PIP_SIZE = {"small": 1, "medium": 2, "large": 3}

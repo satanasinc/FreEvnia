@@ -103,8 +103,8 @@ Writing `0xA5` alone does nothing. The official software sends, in this order, w
 |---|---|
 | Reads (`info`, Get VCP) | verified |
 | Main source `0x15` (USB-C) | verified; DP1 verified |
-| Second source USB-C, HDMI 2 | verified on the OSD |
-| Second source HDMI 1, main HDMI 1/2 | from the app's tables, **unverified** |
+| Second picture USB-C, HDMI 1, HDMI 2 | verified (HDMI 1/2 in both PBP and PIP, from the GUI; USB-C also on the OSD) |
+| Main source HDMI 1 / HDMI 2 | from the app's tables, **unverified** |
 | PBP 1, PIP, off | verified with a camera |
 | PIP positions and sizes | verified with a camera |
 | PBP 2 / PBP 3, swap (`0xF6`) | not tested |

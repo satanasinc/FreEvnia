@@ -25,8 +25,8 @@ Tested on one monitor: **Philips Evnia 49M2C8900L, firmware 1.08**.
 |---|---|
 | Read model, firmware, VCP values | PBP 2, PBP 3 |
 | Full screen / **PBP** / **PIP** on and off | Swap pictures |
-| PIP in the 4 corners, 3 sizes | HDMI 1 as second picture, HDMI as main |
-| Second picture: USB-C, HDMI 2 | Other Evnia models (see below) |
+| PIP in the 4 corners, 3 sizes | HDMI as the *main* source |
+| Second picture: USB-C, HDMI 1, HDMI 2 (PBP and PIP) | Other Evnia models (see below) |
 
 The official app's own data flags other Evnia models as USB-DDC capable; they may work, but **I have not
 tested any of them**. Reports and pull requests are welcome.

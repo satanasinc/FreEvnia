@@ -24,8 +24,8 @@ Probado en un solo monitor: **Philips Evnia 49M2C8900L, firmware 1.08**.
 |---|---|
 | Leer modelo, firmware y valores VCP | PBP 2, PBP 3 |
 | Pantalla completa / **PBP** / **PIP** | Intercambiar las dos imágenes |
-| PIP en las 4 esquinas y 3 tamaños | HDMI 1 como segundo cuadro; HDMI como principal |
-| Segundo cuadro: USB-C, HDMI 2 | Otros modelos Evnia |
+| PIP en las 4 esquinas y 3 tamaños | HDMI como fuente *principal* |
+| Segundo cuadro: USB-C, HDMI 1, HDMI 2 (PBP y PIP) | Otros modelos Evnia |
 
 ## Instalación
 
