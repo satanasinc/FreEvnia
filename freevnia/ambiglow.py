@@ -7,7 +7,8 @@ https://github.com/tomasf/evnia (macOS, PID 0xB201) and verified on a PID 0xB20B
   write : bmRequestType 0x40, bRequest 0x80, wValue 0, wIndex = register address
 
   0xE020 / 0xE030  16-byte control block; this block takes software ownership of the LEDs
-  0xE100..0xE183   44 LEDs x (R, G, B)
+  0xE100..0xE183   44 LEDs x 3 bytes, in the order R, B, G on the unit tested (green and blue are swapped
+                   compared with the macOS notes; push() takes normal (r, g, b) tuples and swaps them)
   0xE020..0xE05F   64-byte control region; writing back what was there before gives the LEDs
                    back to the monitor OSD
 
@@ -114,7 +115,7 @@ def push(dev, leds):
     """Write a full frame: a list of 44 (r, g, b) tuples."""
     if len(leds) != LED_COUNT:
         raise ValueError(f"a frame needs {LED_COUNT} LEDs, got {len(leds)}")
-    write(dev, ADDR_FRAME, bytes(c for led in leds for c in led))
+    write(dev, ADDR_FRAME, bytes(c for led in leds for c in (led[0], led[2], led[1])))   # LED order is R, B, G
 
 
 def scale(rgb, brightness):
