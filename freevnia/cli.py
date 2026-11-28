@@ -151,13 +151,8 @@ def main(argv=None):
             u.set_vcp(dev, a.code, a.value)
             print(f"sent Set VCP 0x{a.code:02x} = {a.value}")
         elif a.cmd == "swap":
-            if u.get_vcp(dev, 0xE6, retries=10)["cur"] != 0:
-                sys.exit("Swap needs PBP or PIP to be on.")
             cur = u.get_vcp(dev, 0x60)["cur"]
-            new = u.swap_value(cur)
-            u.set_vcp(dev, 0x60, new)
-            time.sleep(0.1)
-            u.set_vcp(dev, 0xA4, 0xFFFF)
+            new = u.swap(dev)
             print(f"swapped: 0x{cur:04x} -> 0x{new:04x}")
         elif a.cmd == "mode":
             u.apply_mode(dev, u.MODES[a.name], u.SRC_MAIN[a.main], u.SRC_SUB[a.sub],

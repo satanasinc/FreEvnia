@@ -147,3 +147,19 @@ def swap_value(cur: int) -> int:
     if main_b not in inv_main or sub_b not in inv_sub:
         raise ValueError(f"cannot swap: unknown sources in 0x{cur:04x}")
     return (SRC_SUB[inv_main[main_b]] << 8) | SRC_MAIN[inv_sub[sub_b]]
+
+
+def swap(dev) -> int:
+    """Swap the left and right pictures and return the new VCP 0x60 value. A change of the MAIN source is only
+    applied by the full sequence the official program uses (mode, window, sources, commit), so this re-sends it with
+    the mode and window the monitor reports (those read back as the last value written by software, or 0: then
+    PBP and a medium window at the upper right are assumed)."""
+    if get_vcp(dev, 0xE6, retries=10)["cur"] != 0:
+        raise ValueError("Swap needs PBP or PIP to be on.")
+    new = swap_value(get_vcp(dev, 0x60)["cur"])
+    mode = get_vcp(dev, 0xA5)["cur"]
+    if mode not in (MODES["pip"], MODES["pbp1"]):
+        mode = MODES["pbp1"]
+    win = get_vcp(dev, 0xEC)["cur"] or ((PIP_POSITION["upper-right"] << 8) | PIP_SIZE["medium"])
+    apply_mode(dev, mode, new & 0xFF, new >> 8, win & 0xFF, win >> 8)
+    return new

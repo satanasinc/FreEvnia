@@ -70,12 +70,10 @@ def do_swap():
         dev = device()
         if dev is None:
             raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        if p.get_vcp(dev, 0xE6, retries=10)["cur"] != 0:
-            raise RuntimeError("Swap needs PBP or PIP to be on.")
-        new = p.swap_value(p.get_vcp(dev, 0x60)["cur"])
-        p.set_vcp(dev, 0x60, new)
-        time.sleep(0.1)
-        p.set_vcp(dev, 0xA4, 0xFFFF)
+        try:
+            new = p.swap(dev)
+        except ValueError as e:
+            raise RuntimeError(str(e))
     inv_main = {v: k for k, v in p.SRC_MAIN.items()}
     inv_sub = {v: k for k, v in p.SRC_SUB.items()}
     return inv_main[new & 0xFF], inv_sub[new >> 8]
