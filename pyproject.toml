@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freevnia"
-version = "0.1.0"
+version = "0.2.0"
 description = "Unofficial open-source control for Philips Evnia monitors on Linux: input, PBP and PIP over DDC/CI-over-USB"
 readme = "README.md"
 requires-python = ">=3.9"
