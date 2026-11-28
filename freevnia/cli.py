@@ -101,12 +101,35 @@ def _local_hub():
     return backend.hub_present()
 
 
+def run_pair(a):
+    import time
+    from . import net
+    node = net.Node()
+    if a.pin:
+        try:
+            host = node.pair_with(a.pin)
+        except (ValueError, RuntimeError) as e:
+            sys.exit(str(e))
+        print(f"Paired with {host}.")
+        return
+    pin = node.open_pairing()
+    print(f"PIN: {pin}   (type it on the other computer: freevnia pair {pin}, or Pair… in the window; valid 2 minutes)", flush=True)
+    try:
+        while node._pairing_active():
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    done = node.pairing_done()
+    node.close_pairing()
+    print("Paired." if done else "Pairing closed without a new computer.")
+
+
 def run_serve():
     import time
     from . import net
     node = net.Node()
     node.start()
-    print(f"FreEvnia server on {node.name}; pairing code: {net.pairing_code()}  (Ctrl+C to stop)")
+    print(f"FreEvnia server on {node.name}; to add another computer run `freevnia pair` here  (Ctrl+C to stop)")
     last = None
     try:
         while True:
@@ -166,18 +189,12 @@ def main(argv=None):
     am.add_argument("--osd-speed", help="(set) " + ", ".join(amb.DDC_SPEEDS.values()))
     sub.add_parser("serve", help="run in the background as the monitor server/relay for the other computers "
                                  "(no window; takes over when this computer holds the USB hub)")
-    pc = sub.add_parser("pair", help="show this computer's pairing code, or accept another computer's: pair [CODE]")
-    pc.add_argument("code", nargs="?")
+    pc = sub.add_parser("pair", help="pair two computers: `pair` shows a 4-digit PIN; on the other computer `pair PIN`")
+    pc.add_argument("pin", nargs="?", help="the PIN shown by `freevnia pair` / the GUI on the other computer")
     a = ap.parse_args(argv)
 
     if a.cmd == "pair":
-        from . import net
-        if a.code:
-            net.set_pairing_code(a.code)
-            print("Pairing code saved.")
-        else:
-            print(net.pairing_code())
-        return
+        return run_pair(a)
     if a.cmd == "serve":
         return run_serve()
     if a.cmd == "mode" and not _local_hub():

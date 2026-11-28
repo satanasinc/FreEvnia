@@ -9,10 +9,10 @@ import sys
 import time
 
 from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIntValidator
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QColorDialog, QGridLayout, QGroupBox, QHBoxLayout,
                                QLabel, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget,
-                               QComboBox, QInputDialog, QTabWidget)
+                               QComboBox, QDialog, QLineEdit, QTabWidget)
 
 from . import ambiglow as amb
 from . import net
@@ -436,19 +436,59 @@ class Window(QWidget):
             self.set_ambi((c.red(), c.green(), c.blue()))
 
     def pair_dialog(self):
-        text, ok = QInputDialog.getText(
-            self, "Pair computers",
-            "Pairing code of THIS computer (type it on the others):\n    " + net.pairing_code()
-            + "\n\nTo use another computer's code, paste it here:")
-        if ok and text.strip():
+        """Shows this computer's PIN straight away (pairing is open while the window is) and takes the PIN shown
+        by another computer in the field below."""
+        pin = NODE.open_pairing()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Pair computers")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("To add another computer, type this PIN there:"))
+        big = QLabel(pin)
+        big.setAlignment(Qt.AlignCenter)
+        big.setStyleSheet("font-size: 44px; font-weight: bold; letter-spacing: 8px")
+        lay.addWidget(big)
+        lay.addWidget(QLabel("Or, if the other computer is the one showing a PIN, type it here:"))
+        row = QHBoxLayout()
+        field = QLineEdit()
+        field.setMaxLength(4)
+        field.setPlaceholderText("0000")
+        field.setValidator(QIntValidator(0, 9999))
+        go = QPushButton("Pair")
+        row.addWidget(field)
+        row.addWidget(go)
+        lay.addLayout(row)
+        msg = QLabel("")
+        msg.setWordWrap(True)
+        lay.addWidget(msg)
+
+        def attempt():
+            go.setEnabled(False)
+            msg.setText("Pairing…")
+            QApplication.processEvents()
             try:
-                net.set_pairing_code(text)
-            except ValueError as e:
-                QMessageBox.warning(self, "Pair computers", str(e))
+                host = NODE.pair_with(field.text())
+            except Exception as e:
+                msg.setText("✖ " + str(e))
+                go.setEnabled(True)
                 return
-            NODE.secret = net.get_secret()
-            NODE.role, NODE.remote = ("none", None) if NODE.role == "client" else (NODE.role, NODE.remote)
-            self.status.setText("Pairing code saved.")
+            self.status.setText(f"✔ Paired with {host}.")
+            dlg.accept()
+
+        go.clicked.connect(attempt)
+        field.returnPressed.connect(attempt)
+        timer = QTimer(dlg)
+
+        def check():
+            if NODE.pairing_done():
+                self.status.setText("✔ A new computer was paired.")
+                dlg.accept()
+            elif NODE._pairing is None or not NODE._pairing_active():
+                msg.setText("The PIN expired: close this window and open Pair… again.")
+        timer.timeout.connect(check)
+        timer.start(1000)
+        dlg.exec()
+        timer.stop()
+        NODE.close_pairing()
 
     def poll(self):
         self.net_label.setText(NODE.describe())

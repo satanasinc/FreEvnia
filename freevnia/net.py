@@ -8,12 +8,11 @@ computer can talk to the monitor. Every running FreEvnia therefore works like th
   * when the hub moves to another computer (you switched input), the old server drops out and the copy on the
     new computer takes over.
 
-Security: all computers share one secret (`freevnia pair`). Requests are signed with HMAC-SHA256 over a
+Security: all computers share one secret (a 4-digit PIN pairing (`freevnia pair`)). Requests are signed with HMAC-SHA256 over a
 timestamp + body; the server only runs the calls listed in backend.RPC. This keeps strangers on the LAN out;
 it does not encrypt traffic and a captured request can be replayed for ~2 minutes. Do not expose the ports to
 the internet.
 """
-import base64
 import hashlib
 import hmac
 import json
@@ -28,7 +27,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import backend
+from . import backend, pair
 
 UDP_PORT = 47600
 HTTP_PORT = 47601
@@ -58,20 +57,7 @@ def get_secret() -> bytes:
         return s
 
 
-def pairing_code() -> str:
-    """The secret as 26 letters/digits in groups of 4: easy to read out or type on the other computer."""
-    c = base64.b32encode(get_secret()).decode().rstrip("=")
-    return "-".join(c[i:i + 4] for i in range(0, len(c), 4))
-
-
-def set_pairing_code(code: str) -> None:
-    c = code.strip().upper().replace("-", "").replace(" ", "")
-    try:
-        s = base64.b32decode(c + "=" * (-len(c) % 8))
-    except Exception:
-        raise ValueError("That is not a valid pairing code.")
-    if len(s) != 16:
-        raise ValueError("That is not a valid pairing code.")
+def set_secret(s: bytes) -> None:
     CONFIG.mkdir(parents=True, exist_ok=True)
     f = _secret_file()
     f.write_text(s.hex() + "\n")
@@ -135,6 +121,18 @@ class _Handler(BaseHTTPRequestHandler):
               and _ok_sig(self.node.secret, self.headers.get("X-Sig"), ts, self.path, body.decode("utf-8", "replace")))
         return body, ok
 
+    def _pairing(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            req = json.loads(self.rfile.read(min(n, 1 << 16)) or b"{}")
+            if self.path == "/pair/start":
+                return self._reply(200, self.node.pair_start(req))
+            return self._reply(200, self.node.pair_finish(req))
+        except PermissionError as e:
+            self._reply(403, {"ok": False, "e": str(e)})
+        except Exception as e:
+            self._reply(400, {"ok": False, "e": str(e) or type(e).__name__})
+
     def do_GET(self):
         body, ok = self._body()
         if not ok:
@@ -144,6 +142,8 @@ class _Handler(BaseHTTPRequestHandler):
         self._reply(404, {"ok": False, "e": "unknown"})
 
     def do_POST(self):
+        if self.path in ("/pair/start", "/pair/finish"):
+            return self._pairing()
         body, ok = self._body()
         if not ok:
             return self._reply(401, {"ok": False, "e": "not paired"})
@@ -178,6 +178,8 @@ class Node:
         self._stop = threading.Event()
         self._last_peer_ping = 0.0
         self._thread = None
+        self._pairing = None          # {'pin', 'until', 'fails', 'sessions', 'done'} while showing a PIN
+        self._listening = False
 
     # -- lifecycle
     def start(self):
@@ -213,9 +215,13 @@ class Node:
         if self.role == "server":
             now = time.time()
             self.peers = {h: t for h, t in self.peers.items() if now - t < PEER_TTL}
+        if self._pairing and not self._pairing["done"] and not self._pairing_active():
+            self.close_pairing()          # window expired or too many wrong PINs
 
     # -- server side
-    def _start_server(self):
+    def _start_listeners(self):
+        if self._listening:
+            return
         _Handler.node = self
         try:
             self._httpd = ThreadingHTTPServer(("", HTTP_PORT), _Handler)
@@ -230,9 +236,9 @@ class Node:
             threading.Thread(target=self._udp_loop, args=(self._udp,), daemon=True, name="freevnia-udp").start()
         except OSError:
             self._udp = None
-        self.role, self.remote, self.remote_name, self.unpaired = "server", None, "", False
+        self._listening = True
 
-    def _stop_server(self):
+    def _stop_listeners(self):
         if self._httpd:
             threading.Thread(target=self._httpd.shutdown, daemon=True).start()
             self._httpd.server_close()
@@ -243,9 +249,18 @@ class Node:
                 u.close()
             except OSError:
                 pass
+        self._listening = False
+
+    def _start_server(self):
+        self._start_listeners()
+        self.role, self.remote, self.remote_name, self.unpaired = "server", None, "", False
+
+    def _stop_server(self):
         self.peers = {}
         if self.role == "server":
             self.role = "none"
+        if not self._pairing_active():
+            self._stop_listeners()
 
     def _udp_loop(self, sock):
         while True:
@@ -262,6 +277,8 @@ class Node:
                     reply = {"t": "here", "host": self.name, "port": port,
                              "sig": _sign(self.secret, msg["n"], port, self.name)}
                     sock.sendto(json.dumps(reply).encode(), addr)
+                elif msg.get("t") == "pairwho" and self._pairing_active():
+                    sock.sendto(json.dumps({"t": "pairhere", "host": self.name, "port": HTTP_PORT}).encode(), addr)
                 elif msg.get("t") == "peer" and _ok_sig(self.secret, msg.get("sig"), msg["host"], msg["ts"]) \
                         and abs(time.time() - int(msg["ts"])) <= SKEW:
                     self.peers[msg["host"]] = time.time()
@@ -270,6 +287,101 @@ class Node:
 
     def status_info(self):
         return {"server": self.name, "peers": sorted(self.peers)}
+
+    # -- pairing (PIN)
+    def _pairing_active(self):
+        p = self._pairing
+        return bool(p and not p["done"] and time.time() < p["until"] and p["fails"] < 3)
+
+    def open_pairing(self, seconds=120) -> str:
+        """Start listening for a new computer and return the 4-digit PIN to show to the user."""
+        pin = f"{secrets.randbelow(10000):04d}"
+        self._pairing = {"pin": pin, "until": time.time() + seconds, "fails": 0, "sessions": {}, "done": False}
+        self._start_listeners()
+        return pin
+
+    def close_pairing(self):
+        self._pairing = None
+        if self.role != "server":
+            self._stop_listeners()
+
+    def pairing_done(self) -> bool:
+        return bool(self._pairing and self._pairing["done"])
+
+    def pair_start(self, req):
+        if not self._pairing_active():
+            raise PermissionError("pairing is not open on this computer")
+        p = self._pairing
+        side = pair.Side(p["pin"], "server")
+        client_msg = int(req["X"], 16)
+        side.finish(client_msg, client_msg, side.msg)
+        sid = secrets.token_hex(8)
+        p["sessions"][sid] = side
+        return {"ok": True, "sid": sid, "Y": format(side.msg, "x")}
+
+    def pair_finish(self, req):
+        if not self._pairing_active():
+            raise PermissionError("pairing is not open on this computer")
+        p = self._pairing
+        side = p["sessions"].pop(req.get("sid"), None)
+        if side is None or not side.check(b"client", req.get("mac")):
+            p["fails"] += 1
+            raise PermissionError("wrong PIN")
+        ct = side.encrypt(self.secret)
+        p["done"] = True
+        return {"ok": True, "ct": ct.hex(), "mac": side.tag(b"server", ct)}
+
+    def pair_with(self, pin: str, wait=1.5) -> str:
+        """Type the PIN shown on another computer: find it, run the exchange and adopt its secret."""
+        pin = pin.strip()
+        if not (pin.isdigit() and len(pin) == 4):
+            raise ValueError("The PIN is 4 digits.")
+        targets = []
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            s.settimeout(wait)
+            _send_all(s, json.dumps({"t": "pairwho"}).encode())
+            end = time.time() + wait
+            while time.time() < end:
+                try:
+                    data, addr = s.recvfrom(2048)
+                    r = json.loads(data)
+                except socket.timeout:
+                    break
+                except (OSError, ValueError):
+                    continue
+                if r.get("t") == "pairhere":
+                    targets.append((addr[0], int(r["port"]), r.get("host", "")))
+        finally:
+            s.close()
+        if not targets:
+            raise RuntimeError("No computer is showing a pairing PIN right now (open Pair… on the other one first, "
+                               "and check its firewall: UDP 47600, TCP 47601).")
+        ip, port, host = targets[0]
+
+        def post(path, obj):
+            req = urllib.request.Request(f"http://{ip}:{port}{path}", data=json.dumps(obj).encode(), method="POST")
+            req.add_header("Content-Type", "application/json")
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                raise RuntimeError(json.loads(e.read() or b"{}").get("e", "pairing refused"))
+
+        side = pair.Side(pin, "client")
+        r = post("/pair/start", {"X": format(side.msg, "x")})
+        side.finish(int(r["Y"], 16), side.msg, int(r["Y"], 16))
+        r2 = post("/pair/finish", {"sid": r["sid"], "mac": side.tag(b"client")})
+        ct = bytes.fromhex(r2["ct"])
+        if not side.check(b"server", r2["mac"], ct):
+            raise RuntimeError("The other computer did not prove it knows the PIN.")
+        set_secret(side.decrypt(ct))
+        self.secret = get_secret()
+        if self.role == "client":
+            self.role, self.remote = "none", None
+        self.unpaired = False
+        return host
 
     # -- client side
     def _announce(self):
