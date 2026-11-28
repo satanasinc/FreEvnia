@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FreEvnia
+Comment=PBP / PIP / Ambiglow control for Philips Evnia monitors
+Exec=freevnia
+Icon=freevnia
+Terminal=false
+Categories=Utility;

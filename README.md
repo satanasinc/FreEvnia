@@ -108,3 +108,13 @@ A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-to
 ## License
 
 MIT - see [LICENSE](LICENSE). [README en español](README.es.md).
+
+## Download (no build needed)
+
+Grab one of these from the [Releases](https://github.com/satanasinc/FreEvnia/releases) page:
+
+- **`FreEvnia-x86_64.AppImage`** - any x86_64 distro: `chmod +x FreEvnia-x86_64.AppImage && ./FreEvnia-x86_64.AppImage` opens the GUI; with arguments it is the CLI (`./FreEvnia-x86_64.AppImage mode pip --loc 1`).
+- **`freevnia_<version>_all.deb`** - Debian/Ubuntu: `sudo apt install ./freevnia_*.deb` (installs `freevnia`, `freevnia-gui` and the udev rule).
+- **`FreEvnia-linux-x86_64.tar.gz`** - AppImage + `install.sh` (installs to `~/.local/bin` and sets up the udev rule).
+
+With the AppImage you still need the udev rule once (`udev/99-freevnia.rules`, see the file header) so your user can talk to the monitor without root.
