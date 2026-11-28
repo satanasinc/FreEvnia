@@ -1,0 +1,4 @@
+[FreEvnia]
+title=FreEvnia
+description=Share a Philips Evnia monitor between computers (discovery + commands)
+ports=47600/udp|47601/tcp

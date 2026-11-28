@@ -128,4 +128,6 @@ The monitor connects its USB hub to one computer at a time (the one on the left/
 3. Before changing the main source the GUI lists the computers that have FreEvnia open; if the new source's computer is not running it, you lose control until you switch back with the remote.
 4. `freevnia serve` runs the same logic without a window (e.g. as a systemd user service), and `freevnia mode ...` works from a computer without the hub by asking the server.
 
+Firewall: the computer that holds the hub must accept UDP 47600 and TCP 47601 from the LAN. With ufw (the `.deb` and `install.sh` install a profile): `sudo ufw allow from 192.168.1.0/24 to any app FreEvnia` (use your own subnet). Any computer may be the one holding the hub, so open it on all of them. With firewalld: `sudo firewall-cmd --permanent --add-port=47600/udp --add-port=47601/tcp --reload`.
+
 Security: requests are signed with a shared secret (`~/.config/freevnia/secret`) but not encrypted; use it on a trusted LAN only and don't forward the ports.
