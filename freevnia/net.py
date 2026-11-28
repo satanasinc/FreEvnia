@@ -362,8 +362,8 @@ class Node:
         for ip, port, host in targets:
             try:
                 self._pair_one(ip, port, pin)
-            except RuntimeError as e:
-                last = e
+            except (RuntimeError, OSError) as e:
+                last = RuntimeError(str(e)) if isinstance(e, OSError) else e
                 continue
             self.secret = get_secret()
             if self.role == "client":
