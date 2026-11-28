@@ -351,14 +351,28 @@ class Node:
                     break
                 except (OSError, ValueError):
                     continue
-                if r.get("t") == "pairhere":
-                    targets.append((addr[0], int(r["port"]), r.get("host", "")))
+                if r.get("t") == "pairhere" and r.get("host") != self.name:
+                    targets.append((addr[0], int(r["port"]), r.get("host", "")))      # not our own listener
         finally:
             s.close()
         if not targets:
             raise RuntimeError("No computer is showing a pairing PIN right now (open Pair… on the other one first, "
                                "and check its firewall: UDP 47600, TCP 47601).")
-        ip, port, host = targets[0]
+        last = None
+        for ip, port, host in targets:
+            try:
+                self._pair_one(ip, port, pin)
+            except RuntimeError as e:
+                last = e
+                continue
+            self.secret = get_secret()
+            if self.role == "client":
+                self.role, self.remote = "none", None
+            self.unpaired = False
+            return host
+        raise last
+
+    def _pair_one(self, ip, port, pin):
 
         def post(path, obj):
             req = urllib.request.Request(f"http://{ip}:{port}{path}", data=json.dumps(obj).encode(), method="POST")
@@ -377,11 +391,6 @@ class Node:
         if not side.check(b"server", r2["mac"], ct):
             raise RuntimeError("The other computer did not prove it knows the PIN.")
         set_secret(side.decrypt(ct))
-        self.secret = get_secret()
-        if self.role == "client":
-            self.role, self.remote = "none", None
-        self.unpaired = False
-        return host
 
     # -- client side
     def _announce(self):
