@@ -41,7 +41,7 @@ pip install -e ".[gui]"
 sudo cp udev/99-freevnia.rules /etc/udev/rules.d/ && sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109   # hub (entrada, PBP/PIP, ajustes)
 sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0cf2   # controlador de luces (Ambiglow)
-# tu usuario debe estar en el grupo plugdev
+# no hace falta ningún grupo: la regla da acceso a quien tenga la sesión abierta en el equipo
 ```
 
 El **cable USB de subida del monitor debe estar conectado a este equipo**.

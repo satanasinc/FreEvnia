@@ -50,7 +50,7 @@ sudo cp udev/99-freevnia.rules /etc/udev/rules.d/
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109   # hub (input, PBP/PIP, settings)
 sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0cf2   # Ambiglow LED controller
-# your user must be in the "plugdev" group
+# no group needed: the rule gives access to whoever is logged in at the computer
 ```
 
 The monitor's **USB upstream cable must be connected to this computer**.
