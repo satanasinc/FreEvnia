@@ -6,61 +6,59 @@ The monitor routes its USB (KVM) to the LEFT/main picture: if the main source is
 the program loses access until you switch back with the remote.
 """
 import sys
-import threading
 import time
 
-import usb.core
 from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QColorDialog, QGridLayout, QGroupBox, QHBoxLayout,
                                QLabel, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget,
-                               QComboBox, QTabWidget)
+                               QComboBox, QInputDialog, QTabWidget)
 
 from . import ambiglow as amb
+from . import net
 from . import settings as st
 from . import usbddc as p
 
-LOCK = threading.Lock()          # one USB access at a time (polling and commands)
 POS = {"ul": 3, "ur": 1, "ll": 4, "lr": 2}   # upper-left, upper-right, lower-left, lower-right (verified)
 SIZES = {"Small": 1, "Medium": 2, "Large": 3}
 MAIN_OPTS = (("dp1", "DisplayPort (this PC)"), ("hdmi1", "HDMI 1"), ("hdmi2", "HDMI 2"), ("usbc", "USB-C"))
 SUB_OPTS = (("usbc", "USB-C"), ("hdmi1", "HDMI 1"), ("hdmi2", "HDMI 2"), ("dp1", "DisplayPort"))
 
 
-def device():
-    return usb.core.find(idVendor=p.VID, idProduct=p.PID)
+
+NODE = net.Node()     # decides whether this copy serves the monitor (it holds the USB hub) or talks to one that does
 
 
 def read_state():
-    """None = no access; 'full' = full screen; 'on' = PBP/PIP active; 'err' = read failure."""
-    with LOCK:
-        dev = device()
-        if dev is None:
-            return None
-        try:
-            return "on" if p.get_vcp(dev, 0xE6, retries=10)["cur"] == 0 else "full"
-        except Exception:
-            return "err"
+    return NODE.call("state")
 
 
 def ambi(action, rgb=None, brightness=100):
-    """Run one Ambiglow action under the USB lock (the LEDs are a separate USB device)."""
-    with LOCK:
-        dev = amb.find_device()
-        if action == "color":
-            amb.solid(dev, rgb, "all", brightness)
-        elif action == "off":
-            amb.off(dev)
-        elif action == "release":
-            amb.release(dev, device())
+    return NODE.call("ambi", action, rgb, brightness)
 
 
 def apply(mode, loc, size, main="dp1", sub="usbc"):
-    with LOCK:
-        dev = device()
-        if dev is None:
-            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        p.apply_mode(dev, p.MODES[mode], p.SRC_MAIN[main], p.SRC_SUB[sub], size, loc)
+    return NODE.call("apply", mode, loc, size, main, sub)
+
+
+def read_settings():
+    return NODE.call("settings_read")
+
+
+def write_setting(key, value):
+    return NODE.call("setting_write", key, value)
+
+
+def do_pixel_refresh():
+    return NODE.call("pixel_refresh")
+
+
+def read_osd():
+    return NODE.call("osd_read")
+
+
+def write_osd(**kw):
+    return NODE.call("osd_write", **kw)
 
 
 class Signals(QObject):
@@ -99,65 +97,6 @@ class JobR(QRunnable):
             self.sig.failed.emit(str(e))
 
 
-def read_settings():
-    with LOCK:
-        dev = device()
-        if dev is None:
-            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        return st.read_all(dev), st.time_since_pixel_refresh(dev)
-
-
-def write_setting(key, value):
-    with LOCK:
-        dev = device()
-        if dev is None:
-            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        s = st.BY_KEY[key]
-        st.write(dev, s, value)
-        import time
-        time.sleep(0.4)
-        return key, st.read(dev, s)
-
-
-def do_pixel_refresh():
-    with LOCK:
-        dev = device()
-        if dev is None:
-            raise RuntimeError("No access to the monitor")
-        st.pixel_refresh(dev)
-    return None
-
-
-def read_osd():
-    """The monitor's Ambiglow setting. The monitor sometimes answers with its previous reply: try again."""
-    last = None
-    for _ in range(4):
-        with LOCK:
-            dev = device()
-            if dev is None:
-                return "n/a"
-            try:
-                return amb.ddc_settings(dev)
-            except ValueError as e:
-                last = e
-        time.sleep(0.8)
-    raise last
-
-
-def write_osd(**kw):
-    """Change the monitor's own Ambiglow setting; the monitor draws every mode itself. What to show comes from
-    what was asked (current values + the change), not from a read-back, because the monitor sometimes answers a
-    read with an older reply."""
-    with LOCK:
-        ddc = device()
-        if ddc is None:
-            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
-        vals = amb.ddc_settings(ddc)
-        vals.update({k: v for k, v in kw.items() if v is not None})
-        amb.apply_osd(ddc, amb.find_device(), **kw)
-    return vals
-
-
 class Window(QWidget):
     def __init__(self):
         super().__init__()
@@ -177,6 +116,15 @@ class Window(QWidget):
         self.status = QLabel("Checking the monitor…")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
+        self.net_label = QLabel("")
+        self.net_label.setStyleSheet("color: gray")
+        pair = QPushButton("Pair…")
+        pair.setToolTip("Share the pairing code between your computers so they can use one monitor connection")
+        pair.clicked.connect(self.pair_dialog)
+        nrow = QHBoxLayout()
+        nrow.addWidget(self.net_label, 1)
+        nrow.addWidget(pair)
+        root.addLayout(nrow)
         self.tabs = QTabWidget()
         root.addWidget(self.tabs)
         page1, page2, page3 = QWidget(), QWidget(), QWidget()
@@ -321,10 +269,17 @@ class Window(QWidget):
         if key == self.main:
             return
         if key != "dp1":
+            info = NODE.peers_info()
+            names = ", ".join(n for n in [info["server"], *info["peers"]] if n)
+            if names:
+                extra = (f"Computers running FreEvnia now: {names}.\nIf the new source is one of them, its copy "
+                         "takes over and you can switch back from there. If it is not, you lose control.")
+            else:
+                extra = "No other computer is running FreEvnia, so you would have to switch back with the remote."
             r = QMessageBox.warning(
                 self, "Change the main source",
-                "If the main source is not this PC, the monitor's USB goes with it and this program "
-                "will lose control.\n\nYou will have to switch back with the remote.\n\nContinue?",
+                "The monitor's USB hub follows the main source: the computer on the new source gets control.\n\n"
+                + extra + "\n\nContinue?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if r != QMessageBox.Yes:
                 self.main_btn[self.main].setChecked(True)
@@ -480,7 +435,23 @@ class Window(QWidget):
         if c.isValid():
             self.set_ambi((c.red(), c.green(), c.blue()))
 
+    def pair_dialog(self):
+        text, ok = QInputDialog.getText(
+            self, "Pair computers",
+            "Pairing code of THIS computer (type it on the others):\n    " + net.pairing_code()
+            + "\n\nTo use another computer's code, paste it here:")
+        if ok and text.strip():
+            try:
+                net.set_pairing_code(text)
+            except ValueError as e:
+                QMessageBox.warning(self, "Pair computers", str(e))
+                return
+            NODE.secret = net.get_secret()
+            NODE.role, NODE.remote = ("none", None) if NODE.role == "client" else (NODE.role, NODE.remote)
+            self.status.setText("Pairing code saved.")
+
     def poll(self):
+        self.net_label.setText(NODE.describe())
         if not self.busy:
             self.pool.start(Job(read_state, self.sig))
 
@@ -492,8 +463,9 @@ class Window(QWidget):
     def on_state(self, st):
         self.busy = False
         if st is None:
-            self.status.setText("⚠ No access to the monitor: its USB hub is on another computer.\n"
-                                "Put this PC on the left/main picture with the remote.")
+            self.status.setText("⚠ No access to the monitor: its USB hub is on another computer and no FreEvnia "
+                                "server was found there.\nOpen FreEvnia on that computer (and pair them), or put "
+                                "this PC on the left/main picture with the remote.")
             self.enable(False)
             return
         self.enable(True)
@@ -527,6 +499,8 @@ class Window(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    NODE.start()
+    app.aboutToQuit.connect(NODE.stop)
     w = Window()
     w.show()
     if "--grab" in sys.argv:      # testing only: save a screenshot of the window and exit
