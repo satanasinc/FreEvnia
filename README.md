@@ -48,7 +48,7 @@ Then open **FreEvnia** from the application menu, or run `freevnia` (no argument
 Other ways, from the [Releases](https://github.com/satanasinc/FreEvnia/releases) page:
 
 - **`FreEvnia-linux-x86_64.tar.gz`**: the AppImage + `install.sh` + `uninstall.sh`. Unpack and run `./install.sh` (it uses the AppImage next to it).
-- **Windows** (`FreEvnia-windows-x64.zip`) and **macOS, Apple Silicon** (`FreEvnia-macos-arm64.zip`): unzip and run `FreEvnia.exe` / `FreEvnia.app` (window) or `freevnia.exe` / `freevnia` (command line). **Untested with a real monitor on those systems so far**; the files are not signed, so Windows SmartScreen / macOS Gatekeeper will warn (the zip's read-me says how to open them). Close the official Evnia Precision Center first.
+- **Windows** (`FreEvnia-windows-x64.zip`) and **macOS, Apple Silicon** (`FreEvnia-macos-arm64.zip`): unzip and run `FreEvnia.exe` / `FreEvnia.app` (window) or `freevnia.exe` / `freevnia` (command line). **Tested with a real monitor on macOS (Apple Silicon): works. Windows: not tested yet**; the files are not signed, so Windows SmartScreen / macOS Gatekeeper will warn (the zip's read-me says how to open them). Close the official Evnia Precision Center first.
 - **`freevnia_<version>_all.deb`** (Debian/Ubuntu): `sudo apt install ./freevnia_*.deb` (installs `freevnia`, `freevnia-gui` and the udev rule).
 - **`FreEvnia-x86_64.AppImage`** alone: `chmod +x` and run it. You still need the udev rule once (`./install.sh --no-udev` skips it; the rule is in `udev/99-freevnia.rules`).
 
