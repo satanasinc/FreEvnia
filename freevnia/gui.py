@@ -63,6 +63,24 @@ def apply(mode, loc, size, main="dp1", sub="usbc"):
         p.apply_mode(dev, p.MODES[mode], p.SRC_MAIN[main], p.SRC_SUB[sub], size, loc)
 
 
+def do_swap():
+    """Swap the left and right pictures using what the monitor reports now (not what this window remembers: this
+    computer may have just received the USB hub and never have set PBP itself)."""
+    with LOCK:
+        dev = device()
+        if dev is None:
+            raise RuntimeError("No access to the monitor (its USB hub is on another computer)")
+        if p.get_vcp(dev, 0xE6, retries=10)["cur"] != 0:
+            raise RuntimeError("Swap needs PBP or PIP to be on.")
+        new = p.swap_value(p.get_vcp(dev, 0x60)["cur"])
+        p.set_vcp(dev, 0x60, new)
+        time.sleep(0.1)
+        p.set_vcp(dev, 0xA4, 0xFFFF)
+    inv_main = {v: k for k, v in p.SRC_MAIN.items()}
+    inv_sub = {v: k for k, v in p.SRC_SUB.items()}
+    return inv_main[new & 0xFF], inv_sub[new >> 8]
+
+
 class Signals(QObject):
     result = Signal(str, object)
     state = Signal(object)
@@ -339,22 +357,9 @@ class Window(QWidget):
         self.run_apply(self.mode or "off", "Main source changed")
 
     def swap_sources(self):
-        if self.mode not in ("pbp1", "pip"):
-            self.status.setText("Swap needs PBP or PIP to be on.")
-            return
-        new_main, new_sub = self.sub, self.main
-        if new_main != "dp1":
-            r = QMessageBox.warning(
-                self, "Swap pictures",
-                "The monitor's USB (keyboard and mouse) goes with the left picture, so this PC will lose control "
-                "until the other computer swaps back (or you use the remote).\n\nContinue?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if r != QMessageBox.Yes:
-                return
-        self.main, self.sub = new_main, new_sub
-        self.main_btn[self.main].setChecked(True)
-        self.sub_btn[self.sub].setChecked(True)
-        self.run_apply(self.mode, "Pictures swapped")
+        self.busy = True
+        self.status.setText("Swapping…")
+        self.pool.start(JobR(do_swap, self.sig, "swapped"))
 
     def set_sub(self, key):
         self.sub = key
@@ -449,7 +454,14 @@ class Window(QWidget):
             self.pool.start(Job(do_pixel_refresh, self.sig, ok_text="Pixel refresh started"))
 
     def on_result(self, tag, value):
-        if tag == "settings":
+        if tag == "swapped":
+            self.busy = False
+            self.main, self.sub = value
+            self.main_btn[self.main].setChecked(True)
+            self.sub_btn[self.sub].setChecked(True)
+            self.status.setText("✔ Pictures swapped")
+            QTimer.singleShot(1500, self.poll)
+        elif tag == "settings":
             vals, since = value
             for key, cb in self.set_combo.items():
                 v = vals.get(key)
