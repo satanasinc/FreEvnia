@@ -5,14 +5,13 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VER="$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml")"
 D="$(mktemp -d)"; trap 'rm -rf "$D"' EXIT
 P="$D/pkg"
-install -d "$P/DEBIAN" "$P/usr/lib/python3/dist-packages" "$P/usr/bin" "$P/usr/lib/udev/rules.d" "$P/usr/share/applications" "$P/usr/share/icons/hicolor/scalable/apps" "$P/etc/ufw/applications.d"
+install -d "$P/DEBIAN" "$P/usr/lib/python3/dist-packages" "$P/usr/bin" "$P/usr/lib/udev/rules.d" "$P/usr/share/applications" "$P/usr/share/icons/hicolor/scalable/apps"
 cp -r "$ROOT/freevnia" "$P/usr/lib/python3/dist-packages/"
 find "$P" -name __pycache__ -prune -exec rm -rf {} +
 printf '#!/bin/sh\nexec python3 -c "import sys; from freevnia.cli import main; sys.exit(main())" "$@"\n' > "$P/usr/bin/freevnia"
 printf '#!/bin/sh\nexec python3 -m freevnia.gui "$@"\n' > "$P/usr/bin/freevnia-gui"
 chmod 755 "$P/usr/bin/"*
 cp "$ROOT/udev/99-freevnia.rules" "$P/usr/lib/udev/rules.d/"
-cp "$ROOT/packaging/ufw/freevnia" "$P/etc/ufw/applications.d/freevnia"
 sed 's/^Exec=.*/Exec=freevnia-gui/; s/^Icon=.*/Icon=freevnia/' "$ROOT/packaging/appimage/freevnia.desktop" > "$P/usr/share/applications/freevnia.desktop"
 cp "$ROOT/packaging/appimage/freevnia.svg" "$P/usr/share/icons/hicolor/scalable/apps/"
 cat > "$P/DEBIAN/control" <<EOT

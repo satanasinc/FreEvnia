@@ -118,16 +118,3 @@ Grab one of these from the [Releases](https://github.com/satanasinc/FreEvnia/rel
 - **`FreEvnia-linux-x86_64.tar.gz`** - AppImage + `install.sh` (installs to `~/.local/bin` and sets up the udev rule).
 
 With the AppImage you still need the udev rule once (`udev/99-freevnia.rules`, see the file header) so your user can talk to the monitor without root.
-
-## Several computers, one monitor
-
-The monitor connects its USB hub to one computer at a time (the one on the left/main picture), and only that computer can talk to it. Run FreEvnia on every computer and pair them once:
-
-1. Open **Pair…** in the GUI of a computer (it shows a 4-digit PIN straight away) and type that PIN on the new computer, either in its **Pair…** window or with `freevnia pair 1234`. From the terminal, `freevnia pair` (no PIN) shows the PIN. The PIN works for 2 minutes and 3 wrong tries.
-2. That's it. Each copy looks for the others with a UDP broadcast on the LAN (UDP 47600, TCP 47601). The copy that sees the USB hub becomes the *server*; the rest forward their commands to it. When you switch the input and the hub moves to another computer, that computer's copy takes over automatically.
-3. Before changing the main source the GUI lists the computers that have FreEvnia open; if the new source's computer is not running it, you lose control until you switch back with the remote.
-4. `freevnia serve` runs the same logic without a window (e.g. as a systemd user service), and `freevnia mode ...` works from a computer without the hub by asking the server.
-
-Firewall: the computer that holds the hub must accept UDP 47600 and TCP 47601 from the LAN. With ufw (the `.deb` and `install.sh` install a profile): `sudo ufw allow from 192.168.1.0/24 to any app FreEvnia` (use your own subnet). Any computer may be the one holding the hub, so open it on all of them. With firewalld: `sudo firewall-cmd --permanent --add-port=47600/udp --add-port=47601/tcp --reload`.
-
-Security (kept simple): pairing uses a PIN-authenticated key exchange, after which all computers share one secret (`~/.config/freevnia/secret`) that signs every request. Traffic is not encrypted: use it on a trusted LAN and don't forward the ports.

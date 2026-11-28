@@ -96,66 +96,6 @@ def run_ambiglow(a):
         sys.exit(f"error talking to the Ambiglow controller: {e}")
 
 
-def _local_hub():
-    from . import backend
-    return backend.hub_present()
-
-
-def run_pair(a):
-    import time
-    from . import net
-    node = net.Node()
-    if a.pin:
-        try:
-            host = node.pair_with(a.pin)
-        except (ValueError, RuntimeError) as e:
-            sys.exit(str(e))
-        print(f"Paired with {host}.")
-        return
-    pin = node.open_pairing()
-    print(f"PIN: {pin}   (type it on the other computer: freevnia pair {pin}, or Pair… in the window; valid 2 minutes)", flush=True)
-    try:
-        while node._pairing_active():
-            time.sleep(0.5)
-    except KeyboardInterrupt:
-        pass
-    done = node.pairing_done()
-    node.close_pairing()
-    print("Paired." if done else "Pairing closed without a new computer.")
-
-
-def run_serve():
-    import time
-    from . import net
-    node = net.Node()
-    node.start()
-    print(f"FreEvnia server on {node.name}; to add another computer run `freevnia pair` here  (Ctrl+C to stop)")
-    last = None
-    try:
-        while True:
-            d = node.describe()
-            if d != last:
-                print(time.strftime("%H:%M:%S"), d, flush=True)
-                last = d
-            time.sleep(2)
-    except KeyboardInterrupt:
-        node.stop()
-
-
-def run_mode_remote(a):
-    """This computer does not hold the USB hub: ask the computer that does."""
-    from . import net
-    node = net.Node()
-    if not node._discover(wait=1.5):
-        sys.exit("This computer has no access to the monitor and no paired FreEvnia server answered." +
-                 (" A server was found with another pairing code: use `freevnia pair`." if node.unpaired else ""))
-    try:
-        node.call("apply", a.name, u.PIP_POSITION[a.position], u.PIP_SIZE[a.size], a.main, a.sub)
-    except Exception as e:
-        sys.exit(f"error: {e}")
-    print(f"mode {a.name}: main={a.main} second={a.sub} (via {node.remote_name})")
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="freevnia", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -187,18 +127,8 @@ def main(argv=None):
     am.add_argument("--osd-position", help="(set) " + ", ".join(amb.DDC_POSITIONS.values()))
     am.add_argument("--osd-brightness", help="(set) " + ", ".join(amb.DDC_BRIGHTNESS_LEVELS.values()))
     am.add_argument("--osd-speed", help="(set) " + ", ".join(amb.DDC_SPEEDS.values()))
-    sub.add_parser("serve", help="run in the background as the monitor server/relay for the other computers "
-                                 "(no window; takes over when this computer holds the USB hub)")
-    pc = sub.add_parser("pair", help="pair two computers: `pair` shows a 4-digit PIN; on the other computer `pair PIN`")
-    pc.add_argument("pin", nargs="?", help="the PIN shown by `freevnia pair` / the GUI on the other computer")
     a = ap.parse_args(argv)
 
-    if a.cmd == "pair":
-        return run_pair(a)
-    if a.cmd == "serve":
-        return run_serve()
-    if a.cmd == "mode" and not _local_hub():
-        return run_mode_remote(a)
     if a.cmd == "ambiglow":
         return run_ambiglow(a)
     if a.cmd in ("settings", "pixel-refresh"):
