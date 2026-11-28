@@ -98,6 +98,9 @@ class Job(QRunnable):
                 self.sig.state.emit(r)
             else:
                 self.sig.done.emit(self.ok_text)
+        except RuntimeError as e:
+            if "deleted" not in str(e):      # "Signal source has been deleted": the window closed while this ran
+                self.sig.failed.emit(str(e))
         except Exception as e:
             self.sig.failed.emit(str(e))
 
@@ -111,6 +114,9 @@ class JobR(QRunnable):
     def run(self):
         try:
             self.sig.result.emit(self.tag, self.fn())
+        except RuntimeError as e:
+            if "deleted" not in str(e):      # "Signal source has been deleted": the window closed while this ran
+                self.sig.failed.emit(str(e))
         except Exception as e:
             self.sig.failed.emit(str(e))
 

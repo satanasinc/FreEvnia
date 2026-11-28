@@ -2,6 +2,7 @@ name: release
 on:
   push:
     tags: ["v*"]
+    branches: ["windows-ci"]      # test branch: builds everything, publishes nothing
 permissions:
   contents: write
 jobs:
@@ -16,6 +17,28 @@ jobs:
       - run: packaging/deb/build.sh
       - run: packaging/make-tarball.sh
       - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/*
           generate_release_notes: true
+  windows:
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Build the exe files
+        shell: pwsh
+        run: packaging\windows\build.ps1
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          dist\FreEvnia-windows\freevnia.exe --help
+          $env:QT_QPA_PLATFORM = "offscreen"
+          dist\FreEvnia-windows\FreEvnia\FreEvnia.exe --grab shot.png
+          if (!(Test-Path shot.png)) { throw "the window did not start" }
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/FreEvnia-windows-x64.zip
