@@ -36,8 +36,10 @@ jobs:
         run: |
           dist\FreEvnia-windows\freevnia.exe --help
           $env:QT_QPA_PLATFORM = "offscreen"
-          dist\FreEvnia-windows\FreEvnia\FreEvnia.exe --grab shot.png
-          if (!(Test-Path shot.png)) { throw "the window did not start" }
+          # a windowed exe does not block the shell: wait for it explicitly
+          $p = Start-Process -FilePath "$PWD\dist\FreEvnia-windows\FreEvnia\FreEvnia.exe" -ArgumentList "--grab","$PWD\shot.png" -Wait -PassThru
+          Write-Host "exit code: $($p.ExitCode)"
+          if (!(Test-Path "$PWD\shot.png")) { throw "the window did not start" }
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
