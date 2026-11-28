@@ -11,7 +11,7 @@ find "$P" -name __pycache__ -prune -exec rm -rf {} +
 printf '#!/bin/sh\nexec python3 -c "import sys; from freevnia.cli import main; sys.exit(main())" "$@"\n' > "$P/usr/bin/freevnia"
 printf '#!/bin/sh\nexec python3 -m freevnia.gui "$@"\n' > "$P/usr/bin/freevnia-gui"
 chmod 755 "$P/usr/bin/"*
-cp "$ROOT/udev/99-freevnia.rules" "$P/usr/lib/udev/rules.d/"
+sed 's/MODE="0660"/MODE="0660", GROUP="plugdev"/' "$ROOT/udev/99-freevnia.rules" > "$P/usr/lib/udev/rules.d/99-freevnia.rules"   # Debian/Ubuntu have plugdev
 sed 's/^Exec=.*/Exec=freevnia-gui/; s/^Icon=.*/Icon=freevnia/' "$ROOT/packaging/appimage/freevnia.desktop" > "$P/usr/share/applications/freevnia.desktop"
 cp "$ROOT/packaging/appimage/freevnia.svg" "$P/usr/share/icons/hicolor/scalable/apps/"
 cat > "$P/DEBIAN/control" <<EOT

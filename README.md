@@ -35,7 +35,25 @@ panel (with a camera where it is visible).
 The official app's own data flags other Evnia models as USB-DDC capable; they may work, but **I have not
 tested any of them**. Reports and pull requests are welcome.
 
-## Install
+## Install (no build needed)
+
+**One command** (installs the AppImage, a launcher and the udev rule; asks for your password only for the rule):
+
+```
+curl -fsSL https://raw.githubusercontent.com/satanasinc/FreEvnia/main/install.sh | bash
+```
+
+Then open **FreEvnia** from the application menu, or run `freevnia` (no arguments = the window; with arguments = the command line, e.g. `freevnia mode pip --loc 1`, `freevnia swap`). Remove it with `./uninstall.sh`. If you prefer to read the script first: [install.sh](install.sh).
+
+Other ways, from the [Releases](https://github.com/satanasinc/FreEvnia/releases) page:
+
+- **`FreEvnia-linux-x86_64.tar.gz`**: the AppImage + `install.sh` + `uninstall.sh`. Unpack and run `./install.sh` (it uses the AppImage next to it).
+- **`freevnia_<version>_all.deb`** (Debian/Ubuntu): `sudo apt install ./freevnia_*.deb` (installs `freevnia`, `freevnia-gui` and the udev rule).
+- **`FreEvnia-x86_64.AppImage`** alone: `chmod +x` and run it. You still need the udev rule once (`./install.sh --no-udev` skips it; the rule is in `udev/99-freevnia.rules`).
+
+If it says *Access denied*, unplug and plug the monitor's USB cable once. The installer picks a group that exists on your system (plugdev, wheel...) so the rule works on Debian, Arch, Fedora...
+
+## Install from source
 
 ```bash
 sudo apt install libusb-1.0-0        # or your distro's equivalent
@@ -108,13 +126,3 @@ A launcher for KDE/GNOME menus is in `contrib/freevnia.desktop`; `contrib/pbp-to
 ## License
 
 MIT - see [LICENSE](LICENSE). [README en español](README.es.md).
-
-## Download (no build needed)
-
-Grab one of these from the [Releases](https://github.com/satanasinc/FreEvnia/releases) page:
-
-- **`FreEvnia-x86_64.AppImage`** - any x86_64 distro: `chmod +x FreEvnia-x86_64.AppImage && ./FreEvnia-x86_64.AppImage` opens the GUI; with arguments it is the CLI (`./FreEvnia-x86_64.AppImage mode pip --loc 1`).
-- **`freevnia_<version>_all.deb`** - Debian/Ubuntu: `sudo apt install ./freevnia_*.deb` (installs `freevnia`, `freevnia-gui` and the udev rule).
-- **`FreEvnia-linux-x86_64.tar.gz`** - AppImage + `install.sh` (installs to `~/.local/bin` and sets up the udev rule).
-
-With the AppImage you still need the udev rule once (`udev/99-freevnia.rules`, see the file header) so your user can talk to the monitor without root.
