@@ -4,5 +4,8 @@
 #   sudo cp udev/99-freevnia.rules /etc/udev/rules.d/ && sudo udevadm control --reload
 #   sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=2109
 #   sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0cf2
+# If "uaccess" is not enough on your distribution (Errno 13 / "Access denied" even after the trigger below),
+# add a group you belong to that exists on it (wheel on Arch, plugdev on Debian), e.g.:  MODE="0660", GROUP="wheel"
+# (a GROUP that does not exist makes udev drop the whole line, so do not use plugdev on Arch).
 SUBSYSTEM=="usb", ATTR{idVendor}=="2109", ATTR{idProduct}=="8884", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTR{idVendor}=="0cf2", ATTR{idProduct}=="b20b", MODE="0660", TAG+="uaccess"
