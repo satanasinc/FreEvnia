@@ -24,7 +24,7 @@ LOCK = threading.Lock()          # one USB access at a time (polling and command
 POS = {"ul": 3, "ur": 1, "ll": 4, "lr": 2}   # upper-left, upper-right, lower-left, lower-right (verified)
 SIZES = {"Small": 1, "Medium": 2, "Large": 3}
 MAIN_OPTS = (("dp1", "DisplayPort (this PC)"), ("hdmi1", "HDMI 1"), ("hdmi2", "HDMI 2"), ("usbc", "USB-C"))
-SUB_OPTS = (("usbc", "USB-C"), ("hdmi1", "HDMI 1"), ("hdmi2", "HDMI 2"))
+SUB_OPTS = (("usbc", "USB-C"), ("hdmi1", "HDMI 1"), ("hdmi2", "HDMI 2"), ("dp1", "DisplayPort"))
 
 
 def device():
