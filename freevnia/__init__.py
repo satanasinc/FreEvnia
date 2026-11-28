@@ -1,5 +1,5 @@
 """FreEvnia - unofficial open-source control for Philips Evnia monitors (DDC/CI over USB)."""
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 def _use_bundled_libusb():
