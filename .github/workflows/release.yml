@@ -42,3 +42,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/FreEvnia-windows-x64.zip
+  macos:
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Build the app
+        run: packaging/macos/build.sh
+      - name: Smoke test
+        run: |
+          dist/FreEvnia-macos/freevnia --help
+          QT_QPA_PLATFORM=offscreen dist/FreEvnia-macos/FreEvnia.app/Contents/MacOS/FreEvnia --grab shot.png
+          test -s shot.png
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/FreEvnia-macos-*.zip
