@@ -46,6 +46,8 @@ sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0cf2   # contro
 
 El **cable USB de subida del monitor debe estar conectado a este equipo**.
 
+**Windows y macOS (Apple Silicon):** descarga `FreEvnia-windows-x64.zip` o `FreEvnia-macos-arm64.zip` desde [Releases](https://github.com/satanasinc/FreEvnia/releases), descomprime y ejecuta. Probado con el monitor real en ambos, sin drivers. No están firmados: en Windows SmartScreen avisa (*Más información > Ejecutar de todas formas*); en macOS desbloquea la app una vez con `xattr -dr com.apple.quarantine FreEvnia.app freevnia` (o clic derecho > Abrir). Cierra antes el Evnia Precision Center oficial.
+
 ## Uso
 
 ```bash
