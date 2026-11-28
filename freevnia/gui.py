@@ -330,16 +330,9 @@ class Window(QWidget):
                 self.main_btn[self.main].setChecked(True)
                 return
         self.main = key
-        if self.sub == key or (key == "usbc" and self.sub == "usbc"):      # the same source cannot be in both pictures
-            self.sub = next(k for k, _ in SUB_OPTS if k != key)
-            self.sub_btn[self.sub].setChecked(True)
         self.run_apply(self.mode or "off", "Main source changed")
 
     def set_sub(self, key):
-        if key == self.main:
-            self.sub_btn[self.sub].setChecked(True)
-            self.status.setText("The second picture cannot use the same source as the main one.")
-            return
         self.sub = key
         if self.mode in ("pbp1", "pip"):
             self.run_apply(self.mode, "Second picture changed")
