@@ -25,7 +25,7 @@ panel (with a camera where it is visible).
 
 | Works | Not verified / not done |
 |---|---|
-| Input, full screen / **PBP** / **PIP**, PIP corner and size, second picture (USB-C, HDMI 1, HDMI 2, DisplayPort) | PBP 2, PBP 3, swap pictures, HDMI as the *main* source |
+| Input, full screen / **PBP** / **PIP**, PIP corner and size, second picture (USB-C, HDMI 1, HDMI 2, DisplayPort), **swap left/right pictures** (`freevnia swap` or the Swap button; the USB/KVM follows the left picture, so it also jumps keyboard and mouse to the other computer) | PBP 2, PBP 3, HDMI as the *main* source |
 | **Ambiglow**: every mode, colour, position, brightness and speed the OSD offers (the monitor draws them) | Follow audio was not confirmed with a camera |
 | Fixed Ambiglow colours of any RGB value, drawn by the PC | |
 | Power LED, resolution notice, CEC, picture mode (SmartImage), audio input | |

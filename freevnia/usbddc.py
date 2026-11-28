@@ -136,3 +136,14 @@ def apply_mode(dev, mode: int, main: int, sub: int, size: int = 2, loc: int = 1)
     set_vcp(dev, 0xEC, (loc << 8) | size); time.sleep(0.1)
     set_vcp(dev, 0x60, (sub << 8) | main); time.sleep(0.1)
     set_vcp(dev, 0xA4, 0xFFFF)
+
+
+def swap_value(cur: int) -> int:
+    """VCP 0x60 value with the left (main) and right (second) pictures exchanged. The monitor's own "swap" is just
+    this: the USB/KVM follows the left picture, so it also hands the keyboard and mouse to the other computer."""
+    inv_main = {v: k for k, v in SRC_MAIN.items()}
+    inv_sub = {v: k for k, v in SRC_SUB.items()}
+    main_b, sub_b = cur & 0xFF, cur >> 8
+    if main_b not in inv_main or sub_b not in inv_sub:
+        raise ValueError(f"cannot swap: unknown sources in 0x{cur:04x}")
+    return (SRC_SUB[inv_main[main_b]] << 8) | SRC_MAIN[inv_sub[sub_b]]

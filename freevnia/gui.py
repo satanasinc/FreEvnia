@@ -222,6 +222,12 @@ class Window(QWidget):
             fl.addLayout(fr)
         self.main_btn[self.main].setChecked(True)
         self.sub_btn[self.sub].setChecked(True)
+        self.swap_btn = QPushButton("⇄  Swap left and right pictures")
+        self.swap_btn.setToolTip("The USB/KVM follows the left picture: this also moves the keyboard and mouse "
+                                 "to the computer on the new left side")
+        self.swap_btn.setMinimumHeight(40)
+        self.swap_btn.clicked.connect(self.swap_sources)
+        fl.addWidget(self.swap_btn)
         l1.addWidget(fbox)
 
         pbox = QGroupBox("PIP window")
@@ -331,6 +337,24 @@ class Window(QWidget):
                 return
         self.main = key
         self.run_apply(self.mode or "off", "Main source changed")
+
+    def swap_sources(self):
+        if self.mode not in ("pbp1", "pip"):
+            self.status.setText("Swap needs PBP or PIP to be on.")
+            return
+        new_main, new_sub = self.sub, self.main
+        if new_main != "dp1":
+            r = QMessageBox.warning(
+                self, "Swap pictures",
+                "The monitor's USB (keyboard and mouse) goes with the left picture, so this PC will lose control "
+                "until the other computer swaps back (or you use the remote).\n\nContinue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if r != QMessageBox.Yes:
+                return
+        self.main, self.sub = new_main, new_sub
+        self.main_btn[self.main].setChecked(True)
+        self.sub_btn[self.sub].setChecked(True)
+        self.run_apply(self.mode, "Pictures swapped")
 
     def set_sub(self, key):
         self.sub = key

@@ -112,6 +112,7 @@ def main(argv=None):
     m.add_argument("--sub", choices=list(u.SRC_SUB), default="usbc")
     m.add_argument("--size", choices=list(u.PIP_SIZE), default="medium")
     m.add_argument("--position", choices=list(u.PIP_POSITION), default="upper-right")
+    sub.add_parser("swap", help="swap the left and right pictures (PBP/PIP must be on); the USB/KVM follows the left picture")
     se = sub.add_parser("settings", help="list the monitor settings, or set one: settings <key> <value>")
     se.add_argument("key", nargs="?", choices=list(st.BY_KEY))
     se.add_argument("value", nargs="?")
@@ -149,6 +150,15 @@ def main(argv=None):
                 sys.exit("Refusing to write without --yes.")
             u.set_vcp(dev, a.code, a.value)
             print(f"sent Set VCP 0x{a.code:02x} = {a.value}")
+        elif a.cmd == "swap":
+            if u.get_vcp(dev, 0xE6, retries=10)["cur"] != 0:
+                sys.exit("Swap needs PBP or PIP to be on.")
+            cur = u.get_vcp(dev, 0x60)["cur"]
+            new = u.swap_value(cur)
+            u.set_vcp(dev, 0x60, new)
+            time.sleep(0.1)
+            u.set_vcp(dev, 0xA4, 0xFFFF)
+            print(f"swapped: 0x{cur:04x} -> 0x{new:04x}")
         elif a.cmd == "mode":
             u.apply_mode(dev, u.MODES[a.name], u.SRC_MAIN[a.main], u.SRC_SUB[a.sub],
                          u.PIP_SIZE[a.size], u.PIP_POSITION[a.position])
